@@ -22,7 +22,7 @@ const SCAN_MESSAGES = [
   "Finalizing Compliance Report..."
 ];
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:8000' : '/api');
 
 export default function App() {
   const [session, setSession] = useState<any>(null);

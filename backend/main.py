@@ -28,14 +28,16 @@ genai_client = genai.Client(api_key=GEMINI_API_KEY)
 
 app = FastAPI(title="Labour Code Auditor API")
 
-# Configure CORS
+# Configure CORS - allow localhost for dev and all Vercel deployments for prod
 origins = [
     "http://localhost:5173",
+    "http://localhost:3000",
 ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
