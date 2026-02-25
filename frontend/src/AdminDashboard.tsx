@@ -56,7 +56,14 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
     const [newLimit, setNewLimit] = useState<number>(0);
     const [resetPassword, setResetPassword] = useState<string>("");
     const [showPassword, setShowPassword] = useState(false);
+    const [showProvisionPassword, setShowProvisionPassword] = useState(false);
     const [isEditLimitOpen, setIsEditLimitOpen] = useState(false);
+
+    // Generate a random 8-char alphanumeric password
+    const generatePassword = () => {
+        const chars = 'ABCDEFGHIJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+        return Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+    };
 
     const fetchData = async () => {
         setLoading(true);
@@ -340,7 +347,11 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                                                     {req.status === 'pending' && (
                                                         <div className="flex justify-end gap-2">
                                                             <Dialog open={isApproveOpen && selectedWaitlistEntry?.id === req.id} onOpenChange={(open) => {
-                                                                if (open) setSelectedWaitlistEntry(req);
+                                                                if (open) {
+                                                                    setSelectedWaitlistEntry(req);
+                                                                    setProvisionPassword(generatePassword());
+                                                                    setShowProvisionPassword(false);
+                                                                }
                                                                 setIsApproveOpen(open);
                                                             }}>
                                                                 <DialogTrigger asChild>
@@ -359,17 +370,28 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                                                                             <Input value={req.email} disabled className="bg-zinc-50" />
                                                                         </div>
                                                                         <div className="grid gap-2">
-                                                                            <label className="text-sm font-medium">Initial Password</label>
+                                                                            <div className="flex items-center justify-between">
+                                                                                <label className="text-sm font-medium">Initial Password</label>
+                                                                                <button type="button" onClick={() => setProvisionPassword(generatePassword())} className="text-xs text-blue-600 hover:underline">↻ Regenerate</button>
+                                                                            </div>
                                                                             <div className="relative">
                                                                                 <KeyRound className="absolute top-2.5 left-2.5 h-4 w-4 text-zinc-500" />
                                                                                 <Input
-                                                                                    type="text"
+                                                                                    type={showProvisionPassword ? "text" : "password"}
                                                                                     placeholder="Enter a secure password..."
-                                                                                    className="pl-9"
+                                                                                    className="pl-9 pr-9"
                                                                                     value={provisionPassword}
                                                                                     onChange={(e) => setProvisionPassword(e.target.value)}
                                                                                 />
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => setShowProvisionPassword(p => !p)}
+                                                                                    className="absolute top-2.5 right-2.5 text-zinc-400 hover:text-zinc-700"
+                                                                                >
+                                                                                    {showProvisionPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                                                                </button>
                                                                             </div>
+                                                                            <p className="text-xs text-zinc-500">Auto-generated. Share this with the user securely.</p>
                                                                         </div>
                                                                     </div>
                                                                     <DialogFooter>
@@ -472,7 +494,7 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                                                                     </div>
                                                                 </div>
                                                                 <div className="space-y-3">
-                                                                    <label className="text-sm font-medium">Reset Password <span className="text-zinc-400 font-normal">(Leave blank to keep current)</span></label>
+                                                                    <label className="text-sm font-medium">New Password <span className="text-zinc-400 font-normal">(Leave blank to keep current)</span></label>
                                                                     <div className="relative">
                                                                         <KeyRound className="absolute top-2.5 left-2.5 h-4 w-4 text-zinc-500" />
                                                                         <Input
