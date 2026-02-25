@@ -133,8 +133,9 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
             });
 
             const data = await res.json();
-            if (res.ok) {
-                // Update waitlist status
+
+            // Helper to mark the waitlist entry as approved and close the dialog
+            const approveAndClose = async () => {
                 const { error: updateError } = await supabase
                     .from('waiting_list')
                     .update({ status: 'approved' })
@@ -142,21 +143,30 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
 
                 if (updateError) {
                     console.error("Waitlist update error:", updateError);
-                    toast.error("User created but waitlist status failed to update. Run RLS fixes!");
+                    toast.error("Status update failed. Ensure RLS fixes are applied!");
                 } else {
-                    toast.success(`User ${selectedWaitlistEntry.email} successfully provisioned!`);
-                    // Update local state immediately for hiding
                     setWaitingList(prev => prev.map(w => w.id === selectedWaitlistEntry.id ? { ...w, status: 'approved' } : w));
                 }
-
                 setProvisionPassword("");
                 setIsApproveOpen(false);
                 setSelectedWaitlistEntry(null);
+            };
 
-                // We rely on local state updates for immediate UI feedback.
-                // The new user profile will appear in "Approved & Live" after a manual refresh.
+            if (res.ok) {
+                toast.success(`User ${selectedWaitlistEntry.email} successfully provisioned!`);
+                await approveAndClose();
             } else {
-                toast.error(data.detail || "Failed to provision user.");
+                const errorMessage = data.detail || "";
+                // If the user already exists in auth, still approve and close – they're already set up.
+                const alreadyExists = errorMessage.toLowerCase().includes("already been registered") ||
+                    errorMessage.toLowerCase().includes("already registered") ||
+                    errorMessage.toLowerCase().includes("already exists");
+                if (alreadyExists) {
+                    toast.success(`${selectedWaitlistEntry.email} is already registered. Marked as approved!`);
+                    await approveAndClose();
+                } else {
+                    toast.error(errorMessage || "Failed to provision user.");
+                }
             }
         } catch (error) {
             toast.error("Error connecting to backend API.");
