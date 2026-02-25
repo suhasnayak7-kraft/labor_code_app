@@ -55,7 +55,9 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
     const [editingProfile, setEditingProfile] = useState<Profile | null>(null);
     const [newLimit, setNewLimit] = useState<number>(0);
     const [resetPassword, setResetPassword] = useState<string>("");
+    const [oldPassword, setOldPassword] = useState<string>("");
     const [showPassword, setShowPassword] = useState(false);
+    const [showOldPassword, setShowOldPassword] = useState(false);
     const [showProvisionPassword, setShowProvisionPassword] = useState(false);
     const [isEditLimitOpen, setIsEditLimitOpen] = useState(false);
 
@@ -493,7 +495,28 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                                                                         <Button variant="outline" size="icon" onClick={() => setNewLimit(newLimit + 1)}>+</Button>
                                                                     </div>
                                                                 </div>
-                                                                <div className="space-y-3">
+                                                                <div className="space-y-2">
+                                                                    <label className="text-sm font-medium">Old Password <span className="text-zinc-400 font-normal">(for reference)</span></label>
+                                                                    <div className="relative">
+                                                                        <KeyRound className="absolute top-2.5 left-2.5 h-4 w-4 text-zinc-500" />
+                                                                        <Input
+                                                                            type={showOldPassword ? "text" : "password"}
+                                                                            placeholder="Current password..."
+                                                                            value={oldPassword}
+                                                                            onChange={(e) => setOldPassword(e.target.value)}
+                                                                            className="pl-9 pr-9"
+                                                                        />
+                                                                        <button type="button" onClick={() => setShowOldPassword(p => !p)} className="absolute top-2.5 right-2.5 text-zinc-400 hover:text-zinc-700">
+                                                                            {showOldPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex items-center gap-2 text-zinc-400 text-sm">
+                                                                    <div className="flex-1 h-px bg-zinc-200" />
+                                                                    <span>↓ New Password</span>
+                                                                    <div className="flex-1 h-px bg-zinc-200" />
+                                                                </div>
+                                                                <div className="space-y-2">
                                                                     <label className="text-sm font-medium">New Password <span className="text-zinc-400 font-normal">(Leave blank to keep current)</span></label>
                                                                     <div className="relative">
                                                                         <KeyRound className="absolute top-2.5 left-2.5 h-4 w-4 text-zinc-500" />
