@@ -17,6 +17,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 interface Profile {
     id: string;
     full_name: string;
+    email: string;
     company_name: string;
     industry: string;
     is_locked: boolean;
@@ -150,7 +151,11 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                 setProvisionPassword("");
                 setIsApproveOpen(false);
                 setSelectedWaitlistEntry(null);
-                fetchData(); // Refresh all to get new profile
+
+                // Fetch profiles separately or after a short delay to avoid stale waitlist data overwriting local state
+                setTimeout(() => {
+                    fetchData();
+                }, 500);
             } else {
                 toast.error(data.detail || "Failed to provision user.");
             }
@@ -167,8 +172,11 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
             .eq('id', id);
 
         if (!error) {
-            setWaitingList(waitingList.map(w => w.id === id ? { ...w, status } : w));
+            setWaitingList(prev => prev.map(w => w.id === id ? { ...w, status } : w));
             toast.success(`Request marked as ${status}.`);
+        } else {
+            console.error("Status update error:", error);
+            toast.error(`Failed to update status to ${status}. Ensure RLS fixes are applied.`);
         }
     };
 
@@ -386,7 +394,9 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                             <Table>
                                 <TableHeader className="bg-zinc-50/50">
                                     <TableRow>
-                                        <TableHead>User / Company</TableHead>
+                                        <TableHead>Name</TableHead>
+                                        <TableHead>Email</TableHead>
+                                        <TableHead>Company</TableHead>
                                         <TableHead className="w-[120px] text-center">Daily Quota</TableHead>
                                         <TableHead className="w-[140px]">Access Status</TableHead>
                                         <TableHead className="text-right">Actions</TableHead>
@@ -395,17 +405,21 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                                 <TableBody>
                                     {liveProfiles.length === 0 ? (
                                         <TableRow>
-                                            <TableCell colSpan={4} className="text-center h-24 text-zinc-500">No active users found.</TableCell>
+                                            <TableCell colSpan={6} className="text-center h-24 text-zinc-500">No active users found.</TableCell>
                                         </TableRow>
                                     ) : (
                                         liveProfiles.map(profile => (
                                             <TableRow key={profile.id} className={profile.is_locked ? "bg-amber-50/30" : ""}>
-                                                <TableCell>
-                                                    <div className="font-medium flex items-center gap-2">
+                                                <TableCell className="font-medium">
+                                                    <div className="flex items-center gap-2">
                                                         {profile.full_name || 'N/A'}
                                                         {profile.role === 'admin' && <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">Admin</Badge>}
                                                     </div>
-                                                    <div className="text-sm text-zinc-500">{profile.company_name || 'Unknown Co.'} • {profile.industry || 'Unknown'}</div>
+                                                </TableCell>
+                                                <TableCell className="text-sm font-mono">{profile.email || 'N/A'}</TableCell>
+                                                <TableCell>
+                                                    <div className="text-sm font-medium">{profile.company_name || 'Unknown Co.'}</div>
+                                                    <div className="text-xs text-zinc-500">{profile.industry || 'Unknown'}</div>
                                                 </TableCell>
                                                 <TableCell className="text-center">
                                                     <Badge variant="secondary" className="font-mono text-sm px-2.5 py-0.5">{profile.daily_audit_limit}</Badge>
@@ -502,25 +516,23 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                             <Table>
                                 <TableHeader className="bg-zinc-50/50">
                                     <TableRow>
-                                        <TableHead>Date</TableHead>
                                         <TableHead>Name</TableHead>
-                                        <TableHead>Company</TableHead>
                                         <TableHead>Email</TableHead>
+                                        <TableHead>Company</TableHead>
                                         <TableHead className="text-right">Action</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {rejectedRequests.length === 0 ? (
                                         <TableRow>
-                                            <TableCell colSpan={5} className="text-center h-24 text-zinc-500">No rejected applications.</TableCell>
+                                            <TableCell colSpan={4} className="text-center h-24 text-zinc-500">No rejected applications.</TableCell>
                                         </TableRow>
                                     ) : (
                                         rejectedRequests.map(req => (
                                             <TableRow key={req.id}>
-                                                <TableCell className="text-xs text-zinc-500">{new Date(req.created_at).toLocaleDateString()}</TableCell>
                                                 <TableCell className="font-medium">{req.full_name}</TableCell>
-                                                <TableCell>{req.company_name}</TableCell>
-                                                <TableCell>{req.email}</TableCell>
+                                                <TableCell className="text-sm font-mono">{req.email}</TableCell>
+                                                <TableCell className="text-sm">{req.company_name}</TableCell>
                                                 <TableCell className="text-right">
                                                     <Button size="sm" variant="outline" onClick={() => updateWaitlistStatus(req.id, 'pending')}>Revert to Pending</Button>
                                                 </TableCell>
