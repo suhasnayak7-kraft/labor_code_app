@@ -9,7 +9,7 @@ import { Badge } from './components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "./components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "./components/ui/alert-dialog";
-import { Shield, Lock, Unlock, Mail, Loader2, UserX, UserCheck, Activity, KeyRound, Save } from 'lucide-react';
+import { Shield, Lock, Unlock, Mail, Loader2, UserX, UserCheck, Activity, KeyRound, Save, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -55,6 +55,7 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
     const [editingProfile, setEditingProfile] = useState<Profile | null>(null);
     const [newLimit, setNewLimit] = useState<number>(0);
     const [resetPassword, setResetPassword] = useState<string>("");
+    const [showPassword, setShowPassword] = useState(false);
     const [isEditLimitOpen, setIsEditLimitOpen] = useState(false);
 
     const fetchData = async () => {
@@ -474,7 +475,20 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                                                                     <label className="text-sm font-medium">Reset Password <span className="text-zinc-400 font-normal">(Leave blank to keep current)</span></label>
                                                                     <div className="relative">
                                                                         <KeyRound className="absolute top-2.5 left-2.5 h-4 w-4 text-zinc-500" />
-                                                                        <Input type="text" placeholder="New secure password..." value={resetPassword} onChange={(e) => setResetPassword(e.target.value)} className="pl-9" />
+                                                                        <Input
+                                                                            type={showPassword ? "text" : "password"}
+                                                                            placeholder="New secure password..."
+                                                                            value={resetPassword}
+                                                                            onChange={(e) => setResetPassword(e.target.value)}
+                                                                            className="pl-9 pr-9"
+                                                                        />
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => setShowPassword(p => !p)}
+                                                                            className="absolute top-2.5 right-2.5 text-zinc-400 hover:text-zinc-700"
+                                                                        >
+                                                                            {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                                                        </button>
                                                                     </div>
                                                                 </div>
                                                             </div>
