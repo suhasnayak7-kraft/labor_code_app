@@ -25,6 +25,7 @@ interface Profile {
     is_deleted: boolean;
     daily_audit_limit: number;
     role: string;
+    admin_password_ref?: string;
 }
 
 interface WaitingListEntry {
@@ -164,6 +165,8 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
 
             if (res.ok) {
                 toast.success(`User ${selectedWaitlistEntry.email} successfully provisioned!`);
+                // Save password ref for admin reference in future Edit Profile
+                await supabase.from('profiles').update({ admin_password_ref: provisionPassword }).eq('email', selectedWaitlistEntry.email);
                 await approveAndClose();
             } else {
                 const errorMessage = data.detail || "";
@@ -228,6 +231,9 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                     });
                     if (res.ok) {
                         toast.success("User password has been reset.");
+                        // Store password ref in profile for admin reference
+                        await supabase.from('profiles').update({ admin_password_ref: resetPassword }).eq('id', editingProfile.id);
+                        setProfiles(prev => prev.map(p => p.id === editingProfile.id ? { ...p, admin_password_ref: resetPassword } : p));
                     } else {
                         const data = await res.json();
                         toast.error(data.detail || "Failed to reset password.");
@@ -239,6 +245,7 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
 
             setIsEditLimitOpen(false);
             setResetPassword("");
+            setOldPassword("");
         } else {
             toast.error("Failed to update limit.");
         }
@@ -475,7 +482,14 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                                                 </TableCell>
                                                 <TableCell className="text-right space-x-2">
                                                     <Dialog open={isEditLimitOpen && editingProfile?.id === profile.id} onOpenChange={(open) => {
-                                                        if (open) { setEditingProfile(profile); setNewLimit(profile.daily_audit_limit); }
+                                                        if (open) {
+                                                            setEditingProfile(profile);
+                                                            setNewLimit(profile.daily_audit_limit);
+                                                            setOldPassword(profile.admin_password_ref || '');
+                                                            setResetPassword('');
+                                                            setShowOldPassword(false);
+                                                            setShowPassword(false);
+                                                        }
                                                         setIsEditLimitOpen(open);
                                                     }}>
                                                         <DialogTrigger asChild>
