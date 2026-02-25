@@ -16,16 +16,21 @@ interface ApiLog {
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
-export function UsageDashboard() {
+export function UsageDashboard({ token, dailyLimit }: { token?: string, dailyLimit?: number }) {
     const [logs, setLogs] = useState<ApiLog[]>([]);
     const [loading, setLoading] = useState(true);
     const [expandedRow, setExpandedRow] = useState<number | null>(null);
 
     useEffect(() => {
         async function fetchLogs() {
+            if (!token) return;
             setLoading(true);
             try {
-                const response = await fetch(`${API_URL}/logs`);
+                const response = await fetch(`${API_URL}/logs`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
                 if (response.ok) {
                     const data = await response.json();
                     setLogs(data);
@@ -66,11 +71,14 @@ export function UsageDashboard() {
                 </Card>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Audits Performed</CardTitle>
+                        <CardTitle className="text-sm font-medium">Audits Today</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="text-3xl font-bold tracking-tight">{logs.length}</div>
-                        <p className="text-xs text-muted-foreground mt-1">Successfully processed documents</p>
+                        <div className="text-3xl font-bold tracking-tight">
+                            {logs.filter(l => new Date(l.created_at).toDateString() === new Date().toDateString()).length}
+                            <span className="text-zinc-400 text-xl font-medium"> / {dailyLimit || '-'}</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">Daily quota remaining</p>
                     </CardContent>
                 </Card>
                 <Card>

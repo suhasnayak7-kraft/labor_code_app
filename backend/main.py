@@ -3,7 +3,8 @@ import io
 import re
 import json
 from datetime import datetime
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from typing import Optional
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pypdf import PdfReader
 from dotenv import load_dotenv
@@ -44,6 +45,19 @@ class AuditResponse(BaseModel):
     risk_score: int
     findings: list[str]
 
+class UserCreateRequest(BaseModel):
+    email: str
+    password: str
+    role: str = "user"
+    daily_audit_limit: int = 1
+    full_name: str = ""
+    company_name: str = ""
+    company_size: str = ""
+    industry: str = ""
+
+class PasswordUpdateRequest(BaseModel):
+    new_password: str
+
 def extract_and_clean_text(file_bytes: bytes) -> str:
     reader = PdfReader(io.BytesIO(file_bytes))
     full_text = []
@@ -64,8 +78,47 @@ def generate_embedding(text: str) -> list[float]:
     )
     return result.embeddings[0].values
 
+async def get_current_user(authorization: Optional[str] = Header(None)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+    
+    token = authorization.split(" ")[1]
+    
+    try:
+        auth_response = supabase.auth.get_user(token)
+        if not auth_response or not auth_response.user:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        return auth_response.user
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Authentication failed: {str(e)}")
+
 @app.post("/audit", response_model=AuditResponse)
-async def audit_policy(file: UploadFile = File(...)):
+async def audit_policy(
+    file: UploadFile = File(...),
+    user = Depends(get_current_user)
+):
+    # 1. GATEKEEPER CHECK: Ensure user is not locked and hasn't exceeded limits
+    profile_res = supabase.table("profiles").select("*").eq("id", user.id).execute()
+    if not profile_res.data:
+        raise HTTPException(status_code=403, detail="Account not found. Contact Administrator.")
+    
+    profile = profile_res.data[0]
+    
+    if profile.get("is_locked"):
+        raise HTTPException(status_code=403, detail="Account Locked. Contact Administrator.")
+    
+    if profile.get("is_deleted"):
+        raise HTTPException(status_code=403, detail="Account not found. Contact Administrator.")
+
+    today_str = datetime.utcnow().date().isoformat()
+    logs_res = supabase.table("api_logs").select("id").eq("user_id", user.id).gte("created_at", today_str).execute()
+    
+    usage_count = len(logs_res.data) if logs_res.data else 0
+    daily_limit = profile.get("daily_audit_limit", 3)
+    
+    if usage_count >= daily_limit:
+        raise HTTPException(status_code=403, detail="Daily limit reached. Please contact Suhasa to increase your quota.")
+
     if not file.filename.endswith('.pdf'):
         raise HTTPException(status_code=400, detail="Only PDF files are supported.")
         
@@ -153,7 +206,8 @@ Analyze the policy for compliance with the legal context. Provide a strict JSON 
                 "completion_tokens": response.usage_metadata.candidates_token_count,
                 "total_tokens": response.usage_metadata.total_token_count,
                 "filename": file.filename,
-                "risk_score": parsed_response.get("risk_score")
+                "risk_score": parsed_response.get("risk_score"),
+                "user_id": user.id
             }).execute()
         else:
             # Fallback if usage_metadata is missing
@@ -163,7 +217,8 @@ Analyze the policy for compliance with the legal context. Provide a strict JSON 
                 "completion_tokens": 0,
                 "total_tokens": 0,
                 "filename": file.filename,
-                "risk_score": parsed_response.get("risk_score")
+                "risk_score": parsed_response.get("risk_score"),
+                "user_id": user.id
             }).execute()
 
         return AuditResponse(
@@ -175,10 +230,74 @@ Analyze the policy for compliance with the legal context. Provide a strict JSON 
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/logs")
-async def get_logs():
+async def get_logs(user = Depends(get_current_user)):
     try:
-        # Fetch logs from Supabase using the secure backend client
-        response = supabase.table("api_logs").select("*").order("created_at", desc=False).execute()
+        # Admins see all logs, regular users see only theirs
+        profile_res = supabase.table("profiles").select("role").eq("id", user.id).execute()
+        is_admin = profile_res.data and profile_res.data[0].get("role") == "admin"
+        
+        query = supabase.table("api_logs").select("*").order("created_at", desc=False)
+        if not is_admin:
+            query = query.eq("user_id", user.id)
+            
+        response = query.execute()
         return response.data
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch logs: {str(e)}")
+
+@app.post("/admin/users")
+async def create_admin_user(request: UserCreateRequest, admin_user = Depends(get_current_user)):
+    # 1. Verify caller is an admin
+    profile_res = supabase.table("profiles").select("role").eq("id", admin_user.id).execute()
+    if not profile_res.data or profile_res.data[0].get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized. Admin access required.")
+        
+    try:
+        # 2. Create the user using the Service Role Key (already initialized in 'supabase' client)
+        new_user = supabase.auth.admin.create_user({
+            "email": request.email,
+            "password": request.password,
+            "email_confirm": True,
+            "user_metadata": {
+                "full_name": request.full_name,
+                "company_name": request.company_name
+            }
+        })
+        
+        if not new_user or not new_user.user:
+            raise HTTPException(status_code=500, detail="Failed to create auth user")
+            
+        # 3. The trigger handles initial profile insertion, but we need to update limits and industry
+        supabase.table("profiles").update({
+            "daily_audit_limit": request.daily_audit_limit,
+            "company_name": request.company_name,
+            "company_size": request.company_size,
+            "industry": request.industry,
+            "role": request.role
+        }).eq("id", new_user.user.id).execute()
+        
+        return {"success": True, "user_id": new_user.user.id, "email": new_user.user.email}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error provisioning user: {str(e)}")
+
+@app.put("/admin/users/{target_user_id}/password")
+async def reset_user_password(
+    target_user_id: str, 
+    request: PasswordUpdateRequest, 
+    admin_user = Depends(get_current_user)
+):
+    # 1. Verify caller is an admin
+    profile_res = supabase.table("profiles").select("role").eq("id", admin_user.id).execute()
+    if not profile_res.data or profile_res.data[0].get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized. Admin access required.")
+        
+    try:
+        # 2. Update the user's password using the Service Role Key
+        res = supabase.auth.admin.update_user_by_id(
+            target_user_id,
+            {"password": request.new_password}
+        )
+        return {"success": True, "message": "Password updated successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error resetting password: {str(e)}")

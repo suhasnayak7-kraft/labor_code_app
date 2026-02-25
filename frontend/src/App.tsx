@@ -8,6 +8,12 @@ import { Badge } from './components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from './components/ui/alert';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './components/ui/accordion';
 import { UsageDashboard } from './Usage';
+import { supabase } from './lib/supabase';
+import { Login } from './Login';
+import { RequestAccess } from './RequestAccess';
+import { CheckStatus } from './CheckStatus';
+import { AdminDashboard } from './AdminDashboard';
+import { toast } from 'sonner';
 
 const SCAN_MESSAGES = [
   "Extracting Policy Text...",
@@ -19,7 +25,11 @@ const SCAN_MESSAGES = [
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export default function App() {
-  const [currentTab, setCurrentTab] = useState<'audit' | 'usage'>('audit');
+  const [session, setSession] = useState<any>(null);
+  const [profile, setProfile] = useState<any>(null);
+  const [currentTab, setCurrentTab] = useState<'audit' | 'usage' | 'admin'>('audit');
+  const [authView, setAuthView] = useState<'login' | 'request'>('login');
+
   const [file, setFile] = useState<File | null>(null);
   const [isAuditing, setIsAuditing] = useState(false);
   const [result, setResult] = useState<{ risk_score: number; findings: string[] } | null>(null);
@@ -28,10 +38,37 @@ export default function App() {
   const [scanProgress, setScanProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session) fetchProfile(session.user.id);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (session) fetchProfile(session.user.id);
+      else setProfile(null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const fetchProfile = async (userId: string) => {
+    const { data } = await supabase.from('profiles').select('*').eq('id', userId).single();
+    if (data) setProfile(data);
+  };
+
   // Fetch initial token usage to display in the badge
   const fetchTotalTokens = async () => {
+    if (!session?.access_token) return;
     try {
-      const response = await fetch(`${API_URL}/logs`);
+      const response = await fetch(`${API_URL}/logs`, {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
+        }
+      });
       if (response.ok) {
         const data = await response.json();
         if (data && Array.isArray(data)) {
@@ -92,14 +129,20 @@ export default function App() {
     try {
       const response = await fetch(`${API_URL}/audit`, {
         method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session?.access_token}`,
+        },
         body: formData,
       });
 
-      if (!response.ok) {
-        throw new Error('Audit failed. Ensure the backend is running and Supabase RPC is configured.');
-      }
-
       const data = await response.json();
+
+      if (!response.ok) {
+        if (response.status === 403) {
+          throw new Error(data.detail || "Access Denied.");
+        }
+        throw new Error(data.detail || 'Audit failed. Ensure the backend is running.');
+      }
 
       // Snap to 100% and clear interval
       clearInterval(progressInterval);
@@ -116,10 +159,67 @@ export default function App() {
     } catch (error: any) {
       clearInterval(progressInterval);
       console.error(error);
-      alert(error.message || "An error occurred during the audit.");
+      toast.error(error.message || "An error occurred during the audit.");
       setIsAuditing(false);
     }
   };
+
+  if (!session) {
+    return (
+      <div className="min-h-screen bg-zinc-50 relative">
+        <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
+          <CheckStatus />
+          <Button variant="outline" onClick={() => setAuthView(authView === 'login' ? 'request' : 'login')} className="bg-white/50 backdrop-blur-sm shadow-sm">
+            {authView === 'login' ? 'Request Access' : 'Sign In'}
+          </Button>
+        </div>
+        {authView === 'login' ? <Login onLoginSuccess={() => { }} /> : <RequestAccess />}
+      </div>
+    );
+  }
+
+  if (profile?.is_deleted) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-zinc-50 selection:bg-zinc-200 p-4">
+        <Card className="max-w-md w-full border-red-200 shadow-xl">
+          <CardContent className="pt-10 pb-8 text-center space-y-4">
+            <div className="mx-auto bg-zinc-100 w-16 h-16 rounded-full flex items-center justify-center mb-4">
+              <AlertTriangle className="w-8 h-8 text-zinc-600" />
+            </div>
+            <h1 className="text-2xl font-bold tracking-tight text-zinc-900">Access Revoked</h1>
+            <p className="text-zinc-500">
+              Your organization's access to the Labour Code Auditor has been removed.
+            </p>
+            <div className="pt-4">
+              <Button variant="outline" onClick={() => supabase.auth.signOut()} className="w-full">Sign Out</Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (profile?.is_locked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-zinc-50 selection:bg-zinc-200 p-4">
+        <Card className="max-w-md w-full border-red-200 shadow-xl">
+          <CardContent className="pt-10 pb-8 text-center space-y-4">
+            <div className="mx-auto bg-red-100 w-16 h-16 rounded-full flex items-center justify-center mb-4">
+              <AlertTriangle className="w-8 h-8 text-red-600" />
+            </div>
+            <h1 className="text-2xl font-bold tracking-tight text-zinc-900">Account Locked</h1>
+            <p className="text-zinc-500">
+              Your organization's access to the Labour Code Auditor has been temporarily suspended.
+            </p>
+            <p className="text-sm text-zinc-400">Please contact your system administrator.</p>
+            <div className="pt-4">
+              <Button variant="outline" onClick={() => supabase.auth.signOut()} className="w-full">Sign Out</Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-zinc-50 text-zinc-900 font-sans selection:bg-zinc-200">
@@ -147,6 +247,15 @@ export default function App() {
                 <Activity className="w-4 h-4" />
                 Usage
               </button>
+              {profile?.role === 'admin' && (
+                <button
+                  onClick={() => setCurrentTab('admin')}
+                  className={`flex items-center gap-2 transition-colors ${currentTab === 'admin' ? 'text-zinc-900' : 'text-zinc-500 hover:text-zinc-900'}`}
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  Admin
+                </button>
+              )}
             </div>
 
             <Badge
@@ -157,19 +266,25 @@ export default function App() {
               <Zap className="w-3.5 h-3.5 mr-1.5 fill-yellow-400 text-yellow-500" />
               {totalTokens.toLocaleString()} Session Usage
             </Badge>
+
+            <Button variant="ghost" size="sm" onClick={() => supabase.auth.signOut()} className="text-zinc-500 hover:text-zinc-900">
+              Sign Out
+            </Button>
           </div>
         </div>
       </nav>
 
       {/* Main Content */}
       <main className="container mx-auto px-4 md:px-6 py-8">
-        {currentTab === 'usage' ? (
+        {currentTab === 'admin' && profile?.role === 'admin' ? (
+          <AdminDashboard session={session} adminProfile={profile} />
+        ) : currentTab === 'usage' ? (
           <div className="max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="mb-8">
               <h1 className="text-3xl font-bold tracking-tight">API Usage Dashboard</h1>
               <p className="text-zinc-500 mt-2">Monitor your AI token consumption and audit history.</p>
             </div>
-            <UsageDashboard />
+            <UsageDashboard token={session?.access_token} dailyLimit={profile?.daily_audit_limit} />
           </div>
         ) : (
           <div className="max-w-4xl mx-auto align-top">
@@ -348,8 +463,9 @@ export default function App() {
               )}
             </AnimatePresence>
           </div>
-        )}
-      </main>
-    </div>
+        )
+        }
+      </main >
+    </div >
   );
 }
