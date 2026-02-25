@@ -295,35 +295,28 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                             <Table>
                                 <TableHeader className="bg-zinc-50/50">
                                     <TableRow>
-                                        <TableHead>Date</TableHead>
                                         <TableHead>Name</TableHead>
-                                        <TableHead>Company Info</TableHead>
                                         <TableHead>Email</TableHead>
-                                        <TableHead>Status</TableHead>
+                                        <TableHead>Company</TableHead>
+                                        <TableHead>Date</TableHead>
                                         <TableHead className="text-right">Action</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {pendingRequests.length === 0 ? (
                                         <TableRow>
-                                            <TableCell colSpan={6} className="text-center h-24 text-zinc-500">No pending invitations.</TableCell>
+                                            <TableCell colSpan={5} className="text-center h-24 text-zinc-500">No pending invitations.</TableCell>
                                         </TableRow>
                                     ) : (
                                         pendingRequests.map(req => (
                                             <TableRow key={req.id}>
-                                                <TableCell className="text-xs text-zinc-500">{new Date(req.created_at).toLocaleDateString()}</TableCell>
                                                 <TableCell className="font-medium">{req.full_name}</TableCell>
+                                                <TableCell className="text-sm font-mono">{req.email}</TableCell>
                                                 <TableCell>
-                                                    <div className="font-medium">{req.company_name}</div>
+                                                    <div className="font-medium text-sm">{req.company_name}</div>
                                                     <div className="text-xs text-zinc-500">{req.industry} • {req.company_size}</div>
                                                 </TableCell>
-                                                <TableCell>{req.email}</TableCell>
-                                                <TableCell>
-                                                    <Badge variant={req.status === 'pending' ? 'secondary' : req.status === 'approved' ? 'default' : 'destructive'}
-                                                        className={req.status === 'approved' ? 'bg-emerald-100 text-emerald-800' : ''}>
-                                                        {req.status}
-                                                    </Badge>
-                                                </TableCell>
+                                                <TableCell className="text-xs text-zinc-500">{new Date(req.created_at).toLocaleDateString()}</TableCell>
                                                 <TableCell className="text-right space-x-2">
                                                     {req.status === 'pending' && (
                                                         <div className="flex justify-end gap-2">
