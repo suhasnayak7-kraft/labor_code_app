@@ -19,6 +19,7 @@ interface Profile {
     full_name: string;
     email: string;
     company_name: string;
+    company_size?: string;
     industry: string;
     is_locked: boolean;
     is_deleted: boolean;
@@ -145,17 +146,15 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                 } else {
                     toast.success(`User ${selectedWaitlistEntry.email} successfully provisioned!`);
                     // Update local state immediately for hiding
-                    setWaitingList(waitingList.map(w => w.id === selectedWaitlistEntry.id ? { ...w, status: 'approved' } : w));
+                    setWaitingList(prev => prev.map(w => w.id === selectedWaitlistEntry.id ? { ...w, status: 'approved' } : w));
                 }
 
                 setProvisionPassword("");
                 setIsApproveOpen(false);
                 setSelectedWaitlistEntry(null);
 
-                // Fetch profiles separately or after a short delay to avoid stale waitlist data overwriting local state
-                setTimeout(() => {
-                    fetchData();
-                }, 500);
+                // We rely on local state updates for immediate UI feedback.
+                // The new user profile will appear in "Approved & Live" after a manual refresh.
             } else {
                 toast.error(data.detail || "Failed to provision user.");
             }
@@ -266,8 +265,17 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                         </p>
                     </div>
                 </div>
-                <div className="hidden sm:flex items-center gap-2 text-sm text-zinc-400">
-                    <Activity size={16} className="text-emerald-400" /> System Operational
+                <div className="flex items-center gap-4">
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-zinc-400 hover:text-white hover:bg-zinc-800 gap-2 h-9 px-3"
+                        onClick={fetchData}
+                        disabled={loading}
+                    >
+                        {loading ? <Loader2 size={16} className="animate-spin" /> : <Activity size={16} className="text-emerald-400" />}
+                        {loading ? 'Refreshing...' : 'Refresh Data'}
+                    </Button>
                 </div>
             </div>
 
@@ -412,7 +420,7 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                                                 <TableCell className="text-sm font-mono">{profile.email || 'N/A'}</TableCell>
                                                 <TableCell>
                                                     <div className="text-sm font-medium">{profile.company_name || 'Unknown Co.'}</div>
-                                                    <div className="text-xs text-zinc-500">{profile.industry || 'Unknown'}</div>
+                                                    <div className="text-xs text-zinc-500">{profile.industry || 'Unknown'} {profile.company_size && `• ${profile.company_size}`}</div>
                                                 </TableCell>
                                                 <TableCell className="text-center">
                                                     <Badge variant="secondary" className="font-mono text-sm px-2.5 py-0.5">{profile.daily_audit_limit}</Badge>
@@ -525,7 +533,10 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                                             <TableRow key={req.id}>
                                                 <TableCell className="font-medium">{req.full_name}</TableCell>
                                                 <TableCell className="text-sm font-mono">{req.email}</TableCell>
-                                                <TableCell className="text-sm">{req.company_name}</TableCell>
+                                                <TableCell>
+                                                    <div className="text-sm font-medium">{req.company_name}</div>
+                                                    <div className="text-xs text-zinc-500">{req.industry} {req.company_size && `• ${req.company_size}`}</div>
+                                                </TableCell>
                                                 <TableCell className="text-right">
                                                     <Button size="sm" variant="outline" onClick={() => updateWaitlistStatus(req.id, 'pending')}>Revert to Pending</Button>
                                                 </TableCell>
@@ -580,6 +591,6 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                 </TabsContent>
 
             </Tabs>
-        </div>
+        </div >
     );
 }
