@@ -44,7 +44,7 @@ app.add_middleware(
 )
 
 class AuditResponse(BaseModel):
-    risk_score: int
+    compliance_score: int
     findings: list[str]
 
 class UserCreateRequest(BaseModel):
@@ -157,25 +157,34 @@ async def audit_policy(
         if not legal_context:
             legal_context = "No relevant legal context found in the database. Provide general review based on typical labour laws."
 
-        # 4. Generate Analysis with Gemini 1.5 Flash
+        # 4. Generate Analysis with Gemini 2.5 Flash
         prompt = f"""
-You are an expert Indian Labour Law Compliance Auditor.
+You are an expert Indian Labour Law Compliance Auditor specializing in the 4 new Labour Codes (2020-2025).
 Review the following Employee Policy against the provided Legal Context.
 
-LEGAL CONTEXT:
+LEGAL CONTEXT (Relevant Sections of Indian Labour Codes):
 {legal_context}
 
 EMPLOYEE POLICY:
 {policy_text}
 
-Analyze the policy for compliance with the legal context. Provide a strict JSON response in the following schema exactly (no markdown formatting, just raw JSON):
+Analyze the policy for compliance with the legal context. For each finding, cite the specific Labour Code section violated or satisfied.
+
+Provide a strict JSON response in the following schema exactly (no markdown formatting, just raw JSON):
 {{
-    "risk_score": <number between 0 and 100, where 100 is extremely risky/non-compliant>,
+    "compliance_score": <number between 0 and 100, where 100 means FULLY COMPLIANT and 0 means CRITICALLY NON-COMPLIANT>,
     "findings": [
-        "<finding 1>",
-        "<finding 2>"
+        "<finding 1: describe the specific gap or compliance issue with the relevant law section>",
+        "<finding 2>",
+        "<finding 3>"
     ]
 }}
+
+Score guidance:
+- 90-100: Fully compliant, minor or no gaps
+- 70-89: Mostly compliant, a few gaps that need attention
+- 50-69: Moderate compliance issues, corrective action recommended
+- Below 50: Critical non-compliance, immediate legal risk
 """
         # Call Gemini 2.5 Flash
         response = genai_client.models.generate_content(
@@ -196,9 +205,11 @@ Analyze the policy for compliance with the legal context. Provide a strict JSON 
         except json.JSONDecodeError:
             # Fallback if the AI returns malformed JSON
             parsed_response = {
-                "risk_score": 50,
+                "compliance_score": 50,
                 "findings": ["Failed to parse AI response. Please try again.", response_text[:200]]
             }
+
+        compliance_score = parsed_response.get("compliance_score", 50)
 
         # 5. Save usage metadata to API logs
         if response.usage_metadata:
@@ -208,23 +219,22 @@ Analyze the policy for compliance with the legal context. Provide a strict JSON 
                 "completion_tokens": response.usage_metadata.candidates_token_count,
                 "total_tokens": response.usage_metadata.total_token_count,
                 "filename": file.filename,
-                "risk_score": parsed_response.get("risk_score"),
+                "risk_score": 100 - compliance_score,  # keep DB field for backward compat
                 "user_id": user.id
             }).execute()
         else:
-            # Fallback if usage_metadata is missing
             supabase.table("api_logs").insert({
                 "endpoint": "/audit",
                 "prompt_tokens": 0,
                 "completion_tokens": 0,
                 "total_tokens": 0,
                 "filename": file.filename,
-                "risk_score": parsed_response.get("risk_score"),
+                "risk_score": 100 - compliance_score,
                 "user_id": user.id
             }).execute()
 
         return AuditResponse(
-            risk_score=parsed_response.get("risk_score", 0),
+            compliance_score=compliance_score,
             findings=parsed_response.get("findings", [])
         )
         
