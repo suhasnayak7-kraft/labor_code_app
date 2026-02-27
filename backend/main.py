@@ -187,20 +187,29 @@ async def audit_policy(
         if not policy_text or len(policy_text.strip()) < 50:
             raise HTTPException(status_code=400, detail="Could not extract sufficient text from the PDF. It may be a scanned/image-based document. Please use a text-based PDF.")
 
-        # 2-3. Load Full Legal Context from Markdown File instead of Vector DB
+        # 2. Generate Embedding — truncate to ~8000 chars (covers most policies without hitting limits)
+        truncated_text = policy_text[:8000]
+        query_embedding = generate_embedding(truncated_text)
+
+        # 3. Vector Similarity Search — fault-tolerant; falls back to general review if RPC unavailable
         legal_context = ""
-        md_file_path = os.path.join(os.path.dirname(__file__), "labour_code_2025.md")
         try:
-            if os.path.exists(md_file_path):
-                with open(md_file_path, "r", encoding="utf-8") as f:
-                    legal_context = f.read()
-            else:
-                print("labour_code_2025.md not found, falling back.")
-        except Exception as e:
-            print(f"Error reading local markdown file: {e}")
+            similar_docs = supabase.rpc(
+                "match_labour_laws",
+                {
+                    "query_embedding": query_embedding,
+                    "match_threshold": 0.4,
+                    "match_count": 3  # Reduced from 6 — each chunk is ~3000 chars; 3 = ~9000 chars total
+                }
+            ).execute()
+            # Truncate each chunk to 800 chars to cap context tokens
+            context_texts = [doc['content'][:800] for doc in similar_docs.data] if similar_docs.data else []
+            legal_context = "\n\n---\n\n".join(context_texts)
+        except Exception as rpc_err:
+            print(f"Vector search unavailable (RPC error): {rpc_err}. Proceeding with general review.")
 
         if not legal_context:
-            legal_context = "No specific legal context found. Apply your expertise on the 4 Indian Labour Codes: Code on Wages 2019, Industrial Relations Code 2020, Code on Social Security 2020, and Occupational Safety Health and Working Conditions Code 2020."
+            legal_context = "No specific legal context found in the knowledge base. Apply your expertise on the 4 Indian Labour Codes: Code on Wages 2019, Industrial Relations Code 2020, Code on Social Security 2020, and Occupational Safety Health and Working Conditions Code 2020."
 
         # 4. Generate Analysis with Selected Model
         system_instructions = """You are an expert Indian Labour Law Compliance Auditor specializing in the 4 new Labour Codes enacted in 2019-2020 (in effect from 2025):
