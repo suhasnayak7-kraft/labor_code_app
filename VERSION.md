@@ -34,5 +34,21 @@
 - **Containerization**: Added `Dockerfile` and `.dockerignore` for Cloud Run deployment support.
 - **Infrastructure**: Initial `vercel.json` configuration for frontend deployment.
 
+## [0.7.0] - 2026-02-26
+### Added
+- **Admin Lifecycle**: Implemented user approval flows, role management, and request status tooling.
+- **UI Consistency**: Standardized admin dashboard headers and improved state synchronization.
+- **Password Generation**: Added auto-generation for new user passwords in the provisioning modal.
+
+## [0.6.0] - 2026-02-26
+### Added
+- **API Security**: Initial security hardening for the API layer.
+- **Vercel Prep**: Refactored project structure to support Vercel deployment.
+
+## [0.5.0] - 2026-02-25
+### Added
+- **Project Structure**: Initial commit and project scaffolding.
+- **Context**: Established `PROJECT_CONTEXT.md` for team-wide tracking.
+
 ---
 *Next versions will be appended above this line.*
