@@ -2,13 +2,16 @@ import os
 import io
 import re
 import json
+import time
 from datetime import datetime
 from typing import Optional
-from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Header
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Header, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pypdf import PdfReader
 from dotenv import load_dotenv
 from google import genai
+from anthropic import Anthropic
+from openai import OpenAI
 from pydantic import BaseModel
 from supabase import create_client, Client
 
@@ -18,13 +21,19 @@ load_dotenv()
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
 if not all([SUPABASE_URL, SUPABASE_KEY, GEMINI_API_KEY]):
-    raise RuntimeError("Missing required environment variables.")
+    raise RuntimeError("Missing critical environment variables (Supabase or Gemini).")
 
 # Initialize clients
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 genai_client = genai.Client(api_key=GEMINI_API_KEY)
+
+# Optional clients
+anthropic_client = Anthropic(api_key=ANTHROPIC_API_KEY) if ANTHROPIC_API_KEY else None
+openai_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
 app = FastAPI(title="Labour Code Auditor API")
 
@@ -46,6 +55,9 @@ app.add_middleware(
 class AuditResponse(BaseModel):
     compliance_score: int
     findings: list[str]
+    model_id: str
+    provider: str
+    response_time_ms: int
 
 class UserCreateRequest(BaseModel):
     email: str
@@ -98,8 +110,10 @@ async def get_current_user(authorization: Optional[str] = Header(None)):
 @app.post("/audit", response_model=AuditResponse)
 async def audit_policy(
     file: UploadFile = File(...),
+    model_id: Optional[str] = Form("gemini-1.5-flash"),
     user = Depends(get_current_user)
 ):
+    start_time = time.perf_counter()
     # 1. GATEKEEPER CHECK: Ensure user is not locked and hasn't exceeded limits
     profile_res = supabase.table("profiles").select("*").eq("id", user.id).execute()
     if not profile_res.data:
@@ -158,11 +172,10 @@ async def audit_policy(
         if not legal_context:
             legal_context = "No relevant legal context found in the database. Provide general review based on typical labour laws."
 
-        # 4. Generate Analysis with Gemini 2.5 Flash
+        # 4. Generate Analysis with Selected Model
+        system_instructions = "You are an expert Indian Labour Law Compliance Auditor specializing in the 4 new Labour Codes (2020-2025). Review the Following Employee Policy against the provided Legal Context."
+        
         prompt = f"""
-You are an expert Indian Labour Law Compliance Auditor specializing in the 4 new Labour Codes (2020-2025).
-Review the following Employee Policy against the provided Legal Context.
-
 LEGAL CONTEXT (Relevant Sections of Indian Labour Codes):
 {legal_context}
 
@@ -180,22 +193,72 @@ Provide a strict JSON response in the following schema exactly (no markdown form
         "<finding 3>"
     ]
 }}
-
-Score guidance:
-- 90-100: Fully compliant, minor or no gaps
-- 70-89: Mostly compliant, a few gaps that need attention
-- 50-69: Moderate compliance issues, corrective action recommended
-- Below 50: Critical non-compliance, immediate legal risk
 """
-        # Call Gemini 2.5 Flash
-        response = genai_client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=prompt,
-        )
+        final_provider = "google"
+        final_model = "gemini-1.5-flash"
+        findings = []
+        comp_score = 50
+        p_tokens, c_tokens, t_tokens = 0, 0, 0
+
+        # Model Routing Logic
+        try:
+            if model_id == "claude-3-5-sonnet" and anthropic_client:
+                final_provider = "anthropic"
+                final_model = "claude-3-5-sonnet-20241022"
+                response = anthropic_client.messages.create(
+                    model=final_model,
+                    max_tokens=2048,
+                    system=system_instructions,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                response_text = response.content[0].text
+                p_tokens = response.usage.input_tokens
+                c_tokens = response.usage.output_tokens
+                t_tokens = p_tokens + c_tokens
+            elif model_id == "gpt-4o" and openai_client:
+                final_provider = "openai"
+                final_model = "gpt-4o"
+                response = openai_client.chat.completions.create(
+                    model=final_model,
+                    messages=[
+                        {"role": "system", "content": system_instructions},
+                        {"role": "user", "content": prompt}
+                    ],
+                    response_format={ "type": "json_object" }
+                )
+                response_text = response.choices[0].message.content
+                p_tokens = response.usage.prompt_tokens
+                c_tokens = response.usage.completion_tokens
+                t_tokens = response.usage.total_tokens
+            else:
+                # Default: Gemini
+                final_provider = "google"
+                final_model = "gemini-1.5-flash"
+                response = genai_client.models.generate_content(
+                    model=final_model,
+                    contents=system_instructions + "\n\n" + prompt,
+                )
+                response_text = response.text
+                if response.usage_metadata:
+                    p_tokens = response.usage_metadata.prompt_token_count
+                    c_tokens = response.usage_metadata.candidates_token_count
+                    t_tokens = response.usage_metadata.total_token_count
+        except Exception as ai_err:
+            print(f"Provider error ({model_id}): {ai_err}. Falling back to Gemini Flash.")
+            # Final Fallback to Gemini Flash if selected provider fails
+            final_provider = "google"
+            final_model = "gemini-1.5-flash"
+            response = genai_client.models.generate_content(
+                model=final_model,
+                contents=system_instructions + "\n\n" + prompt,
+            )
+            response_text = response.text
+            if response.usage_metadata:
+                p_tokens = response.usage_metadata.prompt_token_count
+                c_tokens = response.usage_metadata.candidates_token_count
+                t_tokens = response.usage_metadata.total_token_count
         
-        response_text = response.text.strip()
-        
-        # Clean up markdown code blocks if the model insists on returning them
+        response_text = response_text.strip()
         if response_text.startswith("```json"):
             response_text = response_text[7:-3].strip()
         elif response_text.startswith("```"):
@@ -203,42 +266,36 @@ Score guidance:
             
         try:
             parsed_response = json.loads(response_text)
+            comp_score = parsed_response.get("compliance_score", 50)
+            findings = parsed_response.get("findings", [])
         except json.JSONDecodeError:
-            # Fallback if the AI returns malformed JSON
-            parsed_response = {
-                "compliance_score": 50,
-                "findings": ["Failed to parse AI response. Please try again.", response_text[:200]]
-            }
+            comp_score = 50
+            findings = ["Failed to parse AI response.", response_text[:200]]
 
-        compliance_score = parsed_response.get("compliance_score", 50)
+        end_time = time.perf_counter()
+        resp_time_ms = int((end_time - start_time) * 1000)
 
         # 5. Save usage metadata to API logs
-        if response.usage_metadata:
-            supabase.table("api_logs").insert({
-                "endpoint": "/audit",
-                "prompt_tokens": response.usage_metadata.prompt_token_count,
-                "completion_tokens": response.usage_metadata.candidates_token_count,
-                "total_tokens": response.usage_metadata.total_token_count,
-                "filename": file.filename,
-                "risk_score": 100 - compliance_score,  # keep DB field for backward compat
-                "user_id": user.id,
-                "findings": parsed_response.get("findings", [])
-            }).execute()
-        else:
-            supabase.table("api_logs").insert({
-                "endpoint": "/audit",
-                "prompt_tokens": 0,
-                "completion_tokens": 0,
-                "total_tokens": 0,
-                "filename": file.filename,
-                "risk_score": 100 - compliance_score,
-                "user_id": user.id,
-                "findings": parsed_response.get("findings", [])
-            }).execute()
+        supabase.table("api_logs").insert({
+            "endpoint": "/audit",
+            "prompt_tokens": p_tokens,
+            "completion_tokens": c_tokens,
+            "total_tokens": t_tokens,
+            "filename": file.filename,
+            "risk_score": 100 - comp_score,
+            "user_id": user.id,
+            "findings": findings,
+            "model_id": final_model,
+            "provider": final_provider,
+            "response_time_ms": resp_time_ms
+        }).execute()
 
         return AuditResponse(
-            compliance_score=compliance_score,
-            findings=parsed_response.get("findings", [])
+            compliance_score=comp_score,
+            findings=findings,
+            model_id=final_model,
+            provider=final_provider,
+            response_time_ms=resp_time_ms
         )
         
     except Exception as e:

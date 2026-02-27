@@ -1,9 +1,12 @@
 # 🌌 Project Versioning: The Galactic Trail
 
-> **Current Version:** v1.3.1 (Rigil Kentaurus B)
+> **Current Version:** v1.4.0 (Rigil Kentaurus Prime)
 > **Mission Stage:** 🔴 ALPHA BUILD (Internal Testing)
 > **Timeline (Singularity):** The stable core of the project.
-> **Multiverse (Verses):** Parallel feature branches where the future is written.
+> **Multiverse (Verses):**
+> - **Main (Singularity)**: Core stability.
+> - **Verse 1 (alpha-0.2-ux-refinement)**: UX Polish & Reports.
+> - **Verse 2 (singularity-2)**: Advanced Admin & Multi-Model (Active).
 
 ---
 
@@ -11,6 +14,7 @@
 
 | Version | Object | System | Stage | Date | Mission Summary |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| **v1.4.0** | **Rigil Kentaurus Prime** | **Alpha Centauri** | **ALPHA** | 2026-03-01 | **Alpha 2.2**: Multi-model routing & Admin "Control Tower". |
 | **v1.3.1** | **Rigil Kentaurus B** | **Alpha Centauri** | **ALPHA** | 2026-02-28 | **Singularity-2**: 7-day retention policy and UI privacy polish. |
 | **v1.3** | **Rigil Kentaurus** | **Alpha Centauri** | **ALPHA** | 2026-02-28 | **UX & Reporting**: Audit Logs refinements, PDF export, and Role-based UI. |
 | **v1.2** | **Proxima c** | **Alpha Centauri** | **ALPHA** | 2026-02-27 | **Security Hardening**: Audit, Sourcemaps, and Env Validation. |
@@ -27,6 +31,12 @@
 ---
 
 ## 🛰 Mission Reports
+
+### [v1.4.0] Rigil Kentaurus Prime (2026-03-01) - ALPHA
+- **Multi-Model Routing**: Integrated Anthropic and OpenAI with Gemini fallback logic.
+- **Control Tower Dashboard**: New Admin health section with real-time rate-limit gauges (RPM/TPM).
+- **User Telemetry**: Granular token consumption tracking for each auditor.
+- **Response Time Logging**: Added `response_time_ms` to all audit logs for performance monitoring.
 
 ### [v1.3.1] Rigil Kentaurus B (2026-02-28) - ALPHA
 - **The 7-Day Rule**: Implemented automated Postgres function `expire_old_audits` to delete logs older than 7 days.
