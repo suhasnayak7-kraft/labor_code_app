@@ -92,7 +92,8 @@ async def get_current_user(authorization: Optional[str] = Header(None)):
             raise HTTPException(status_code=401, detail="Invalid token")
         return auth_response.user
     except Exception as e:
-        raise HTTPException(status_code=401, detail=f"Authentication failed: {str(e)}")
+        print(f"Auth error: {e}")
+        raise HTTPException(status_code=401, detail="Authentication failed")
 
 @app.post("/audit", response_model=AuditResponse)
 async def audit_policy(
@@ -239,7 +240,8 @@ Score guidance:
         )
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Audit error: {e}")
+        raise HTTPException(status_code=500, detail="An internal server error occurred during the audit process.")
 
 @app.get("/logs")
 async def get_logs(user = Depends(get_current_user)):
@@ -255,7 +257,8 @@ async def get_logs(user = Depends(get_current_user)):
         response = query.execute()
         return response.data
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch logs: {str(e)}")
+        print(f"Fetch logs error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch logs.")
 
 @app.post("/admin/users")
 async def create_admin_user(request: UserCreateRequest, admin_user = Depends(get_current_user)):
@@ -291,7 +294,8 @@ async def create_admin_user(request: UserCreateRequest, admin_user = Depends(get
         return {"success": True, "user_id": new_user.user.id, "email": new_user.user.email}
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error provisioning user: {str(e)}")
+        print(f"Provision user error: {e}")
+        raise HTTPException(status_code=500, detail="Error provisioning user.")
 
 @app.put("/admin/users/{target_user_id}/password")
 async def reset_user_password(
@@ -312,4 +316,5 @@ async def reset_user_password(
         )
         return {"success": True, "message": "Password updated successfully"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error resetting password: {str(e)}")
+        print(f"Password reset error: {e}")
+        raise HTTPException(status_code=500, detail="Error resetting password.")
