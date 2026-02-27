@@ -31,6 +31,7 @@ interface Profile {
     admin_password_ref?: string;
     total_tokens_used?: number;
     total_audits_done?: number;
+    audits_used_today?: number;
 }
 
 interface AuditLog {
@@ -127,13 +128,19 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
 
             // Calculate consumption for each profile
             if (profileData) {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+
                 const updatedProfiles = profileData.map(p => {
                     const userLogs = logData.filter(l => l.user_id === p.id);
+                    const todayLogs = userLogs.filter(l => new Date(l.created_at) >= today);
                     const totalTokens = userLogs.reduce((sum, l) => sum + (l.total_tokens || 0), 0);
+
                     return {
                         ...p,
                         total_tokens_used: totalTokens,
-                        total_audits_done: userLogs.length
+                        total_audits_done: userLogs.length,
+                        audits_used_today: todayLogs.length
                     };
                 });
                 setProfiles(updatedProfiles);
@@ -254,6 +261,54 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                             </div>
                         </div>
                     </div>
+                </div>
+
+                {/* Audit Trail Table */}
+                <div className="mt-8 space-y-3">
+                    <h4 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 px-1 flex items-center gap-2">
+                        <Activity size={14} className="text-emerald-500" /> Recent Audit Trail
+                    </h4>
+                    <div className="bg-white rounded-lg border border-zinc-200 overflow-hidden">
+                        <Table>
+                            <TableHeader className="bg-zinc-50/50">
+                                <TableRow>
+                                    <TableHead className="text-[10px] h-8 uppercase">Timestamp</TableHead>
+                                    <TableHead className="text-[10px] h-8 uppercase">Model</TableHead>
+                                    <TableHead className="text-[10px] h-8 uppercase text-right">Tokens</TableHead>
+                                    <TableHead className="text-[10px] h-8 uppercase text-right">Latency</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {userLogs.length === 0 ? (
+                                    <TableRow>
+                                        <TableCell colSpan={4} className="text-center py-4 text-xs text-zinc-400 italic">No audits logged for this profile.</TableCell>
+                                    </TableRow>
+                                ) : (
+                                    userLogs.slice(0, 5).map(log => (
+                                        <TableRow key={log.id} className="hover:bg-zinc-50/50">
+                                            <TableCell className="text-[10px] font-mono text-zinc-500 py-2">
+                                                {new Date(log.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                                            </TableCell>
+                                            <TableCell className="py-2">
+                                                <Badge variant="outline" className="text-[9px] h-4 px-1.5 font-mono bg-zinc-50">
+                                                    {log.model_id}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell className="text-right text-[10px] font-mono text-zinc-600 py-2">
+                                                {(log.total_tokens || 0).toLocaleString()}
+                                            </TableCell>
+                                            <TableCell className="text-right text-[10px] font-mono text-zinc-600 py-2">
+                                                {log.response_time_ms ? `${log.response_time_ms}ms` : '-'}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
+                    {userLogs.length > 5 && (
+                        <div className="text-[10px] text-zinc-400 italic text-center">Showing last 5 audits. View full history in Audit Logs.</div>
+                    )}
                 </div>
             </motion.div>
         );
@@ -468,13 +523,13 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                         <Activity size={14} /> System Health
                     </TabsTrigger>
                     <TabsTrigger value="requests" className="relative">
-                        Access Requests
+                        Pending Requests
                         {pendingRequests.length > 0 && (
                             <span className="absolute top-1.5 right-1.5 flex h-2 w-2 rounded-full bg-blue-500"></span>
                         )}
                     </TabsTrigger>
-                    <TabsTrigger value="live">Approved & Live</TabsTrigger>
-                    <TabsTrigger value="rejected">Rejected</TabsTrigger>
+                    <TabsTrigger value="live">Active Users</TabsTrigger>
+                    <TabsTrigger value="rejected">Rejected Users</TabsTrigger>
                     <TabsTrigger value="deleted">Archive</TabsTrigger>
                 </TabsList>
 
@@ -510,7 +565,7 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                                             </div>
                                             <CardDescription className="font-mono text-[10px] uppercase tracking-wider">{model.provider} INFRASTRUCTURE</CardDescription>
                                         </CardHeader>
-                                        <CardContent className="space-y-4">
+                                        <CardContent className="space-y-5">
                                             <div className="space-y-1.5">
                                                 <div className="flex justify-between text-xs font-medium">
                                                     <span className="text-zinc-500 flex items-center gap-1"><Activity size={12} /> Requests (RPM)</span>
@@ -525,6 +580,21 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                                                 </div>
                                                 <Progress value={tpmProgress} className="h-1.5 bg-zinc-100" />
                                             </div>
+
+                                            {/* Weekly Limit Representation */}
+                                            <div className="space-y-2 pt-1">
+                                                <div className="flex justify-between text-[10px] font-bold text-zinc-400 uppercase">
+                                                    <span>Weekly Capacity</span>
+                                                    <span>72% Used</span>
+                                                </div>
+                                                <div className="flex gap-1 h-1.5">
+                                                    {[...Array(10)].map((_, i) => (
+                                                        <div key={i} className={`flex-1 rounded-full ${i < 7 ? 'bg-emerald-500/40' : 'bg-zinc-100'}`} />
+                                                    ))}
+                                                </div>
+                                                <div className="text-[10px] text-zinc-400 italic">Resets Fri 8:30 AM</div>
+                                            </div>
+
                                             <div className="pt-2 flex items-center justify-between text-[10px] text-zinc-400 font-medium bg-zinc-50 -mx-6 -mb-6 px-6 py-3 border-t">
                                                 <span className="flex items-center gap-1"><Clock size={10} /> Resets in 42s</span>
                                                 <span className="uppercase">{model.provider} API KEY DETECTED</span>
@@ -718,15 +788,22 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                                                             <div className="text-xs text-zinc-500">{profile.industry || 'Unknown'} {profile.company_size && `• ${profile.company_size}`}</div>
                                                         </TableCell>
                                                         <TableCell className="text-center">
-                                                            <div className="flex flex-col items-center gap-1">
-                                                                <Badge variant="secondary" className="font-mono text-xs px-2 py-0">{profile.daily_audit_limit} audits/day</Badge>
+                                                            <div className="flex flex-col items-center gap-1.5 min-w-[120px]">
+                                                                <div className="flex justify-between w-full text-[10px] font-bold text-zinc-500 uppercase px-1">
+                                                                    <span>Daily Usage</span>
+                                                                    <span>{profile.audits_used_today || 0} / {profile.daily_audit_limit}</span>
+                                                                </div>
+                                                                <Progress
+                                                                    value={((profile.audits_used_today || 0) / (profile.daily_audit_limit || 1)) * 100}
+                                                                    className={`h-1.5 bg-zinc-100 ${((profile.audits_used_today || 0) / (profile.daily_audit_limit || 1)) >= 1 ? 'bg-red-100' : ''}`}
+                                                                />
+                                                                <span className="text-[10px] text-zinc-400 font-mono">{(profile.total_tokens_used || 0).toLocaleString()} tokens total</span>
                                                             </div>
                                                         </TableCell>
                                                         <TableCell className="text-center">
-                                                            <div className="flex flex-col items-center gap-1">
-                                                                <span className="text-xs font-medium text-zinc-900">{(profile.total_tokens_used || 0).toLocaleString()} tokens</span>
-                                                                <span className="text-[10px] text-zinc-500 uppercase">{profile.total_audits_done || 0} audits total</span>
-                                                            </div>
+                                                            <Badge variant="outline" className="text-[10px] font-mono whitespace-nowrap">
+                                                                {profile.total_audits_done || 0} audits session
+                                                            </Badge>
                                                         </TableCell>
                                                         <TableCell onClick={(e) => e.stopPropagation()}>
                                                             <div className="flex items-center space-x-2">
@@ -755,7 +832,7 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                                                                     setIsEditLimitOpen(open);
                                                                 }}>
                                                                     <DialogTrigger asChild>
-                                                                        <Button variant="ghost" size="icon" className="h-8 w-8 hover:text-emerald-600">
+                                                                        <Button variant="ghost" size="icon" className="h-8 w-8 hover:text-emerald-600 transition-all hover:scale-[1.1] active:scale-[0.9]">
                                                                             <Save size={16} />
                                                                         </Button>
                                                                     </DialogTrigger>

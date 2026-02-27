@@ -362,7 +362,7 @@ export default function App() {
               </Badge>
             )}
 
-            <Button variant="ghost" size="sm" onClick={() => supabase.auth.signOut()} className="text-zinc-500 hover:text-zinc-900">
+            <Button variant="ghost" size="sm" onClick={() => supabase.auth.signOut()} className="text-zinc-500 hover:text-zinc-900 transition-all hover:scale-[1.05] active:scale-[0.95]">
               Sign Out
             </Button>
           </div>
@@ -431,7 +431,7 @@ export default function App() {
 
                       <Button
                         size="lg"
-                        className="mt-6 w-full max-w-sm font-medium transition-all"
+                        className="mt-6 w-full max-w-sm font-medium transition-all hover:scale-[1.02] active:scale-[0.98] shadow-md hover:shadow-lg"
                         disabled={!file}
                         onClick={(e) => { e.stopPropagation(); handleAudit(); }}
                       >
