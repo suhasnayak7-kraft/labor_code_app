@@ -139,7 +139,7 @@ async def audit_status(user = Depends(get_current_user)):
 @app.post("/audit", response_model=AuditResponse)
 async def audit_policy(
     file: UploadFile = File(...),
-    model_id: Optional[str] = Form("gemini-2.5-flash"),
+    model_id: Optional[str] = Form("gemini-1.5-flash"),
     user = Depends(get_current_user)
 ):
     start_time = time.perf_counter()
@@ -199,10 +199,11 @@ async def audit_policy(
                 {
                     "query_embedding": query_embedding,
                     "match_threshold": 0.4,
-                    "match_count": 6
+                    "match_count": 3  # Reduced from 6 — each chunk is ~3000 chars; 3 = ~9000 chars total
                 }
             ).execute()
-            context_texts = [doc['content'] for doc in similar_docs.data] if similar_docs.data else []
+            # Truncate each chunk to 800 chars to cap context tokens
+            context_texts = [doc['content'][:800] for doc in similar_docs.data] if similar_docs.data else []
             legal_context = "\n\n---\n\n".join(context_texts)
         except Exception as rpc_err:
             print(f"Vector search unavailable (RPC error): {rpc_err}. Proceeding with general review.")
@@ -224,7 +225,7 @@ LEGAL CONTEXT (Relevant Sections of Indian Labour Codes):
 {legal_context}
 
 EMPLOYEE POLICY TO AUDIT:
-{policy_text[:12000]}
+{policy_text[:6000]}
 
 Analyze the policy for compliance with the Indian Labour Codes above. Identify specific gaps, violations, or well-compliant clauses. Cite the relevant Code and section for each finding.
 
@@ -241,7 +242,7 @@ Return ONLY a raw JSON object (no markdown, no code fences) in this exact schema
 }}
 """
         final_provider = "google"
-        final_model = "gemini-2.5-flash"
+        final_model = "gemini-1.5-flash"  # High TPM quota on free tier (1M TPM vs 2.5-flash's lower preview limits)
         findings = []
         comp_score = 50
         p_tokens, c_tokens, t_tokens = 0, 0, 0
