@@ -117,10 +117,29 @@ async def get_current_user(authorization: Optional[str] = Header(None)):
         print(f"Auth error: {e}")
         raise HTTPException(status_code=401, detail="Authentication failed")
 
+@app.get("/audit/status")
+async def audit_status(user = Depends(get_current_user)):
+    """Returns today's usage count and daily limit for the current user."""
+    profile_res = supabase.table("profiles").select("daily_audit_limit, role").eq("id", user.id).execute()
+    if not profile_res.data:
+        raise HTTPException(status_code=403, detail="Account not found.")
+    profile = profile_res.data[0]
+    is_admin = profile.get("role") == "admin"
+    daily_limit = profile.get("daily_audit_limit", 3)
+    today_str = datetime.utcnow().date().isoformat()
+    logs_res = supabase.table("api_logs").select("id").eq("user_id", user.id).gte("created_at", today_str).execute()
+    usage_count = len(logs_res.data) if logs_res.data else 0
+    return {
+        "usage_today": usage_count,
+        "daily_limit": daily_limit,
+        "remaining": max(0, daily_limit - usage_count) if not is_admin else 999,
+        "is_admin": is_admin
+    }
+
 @app.post("/audit", response_model=AuditResponse)
 async def audit_policy(
     file: UploadFile = File(...),
-    model_id: Optional[str] = Form("gemini-1.5-flash"),
+    model_id: Optional[str] = Form("gemini-2.5-flash"),
     user = Depends(get_current_user)
 ):
     start_time = time.perf_counter()
@@ -128,84 +147,101 @@ async def audit_policy(
     profile_res = supabase.table("profiles").select("*").eq("id", user.id).execute()
     if not profile_res.data:
         raise HTTPException(status_code=403, detail="Account not found. Contact Administrator.")
-    
+
     profile = profile_res.data[0]
-    
+    is_admin = profile.get("role") == "admin"
+
     if profile.get("is_locked"):
         raise HTTPException(status_code=403, detail="Account Locked. Contact Administrator.")
-    
+
     if profile.get("is_deleted"):
         raise HTTPException(status_code=403, detail="Account not found. Contact Administrator.")
 
-    today_str = datetime.utcnow().date().isoformat()
-    logs_res = supabase.table("api_logs").select("id").eq("user_id", user.id).gte("created_at", today_str).execute()
-    
-    usage_count = len(logs_res.data) if logs_res.data else 0
-    daily_limit = profile.get("daily_audit_limit", 3)
-    
-    if usage_count >= daily_limit:
-        raise HTTPException(status_code=403, detail="Daily limit reached. Please contact Suhasa to increase your quota.")
+    # Admins are exempt from daily rate limits
+    if not is_admin:
+        today_str = datetime.utcnow().date().isoformat()
+        logs_res = supabase.table("api_logs").select("id").eq("user_id", user.id).gte("created_at", today_str).execute()
+        usage_count = len(logs_res.data) if logs_res.data else 0
+        daily_limit = profile.get("daily_audit_limit", 3)
+        if usage_count >= daily_limit:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Daily audit limit reached ({usage_count}/{daily_limit}). Contact your administrator to increase your quota."
+            )
 
-    if not file.filename.endswith('.pdf'):
-        raise HTTPException(status_code=400, detail="Only PDF files are supported.")
-        
+    if not file.filename.lower().endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported. Please upload a .pdf file.")
+
     try:
         # 1. Convert PDF to text
         file_bytes = await file.read()
-        policy_text = extract_and_clean_text(file_bytes)
-        
-        if not policy_text:
-            raise HTTPException(status_code=400, detail="Could not extract text from the PDF.")
-            
-        # 2. Generate Embedding for the policy text
-        # If the policy is very long, we might just embed the first chunk or create a summary, 
-        # but for this requirement we embed the whole text or a representative chunk.
-        # Truncating to ~5000 characters for embedding to avoid limits
-        truncated_text = policy_text[:5000]
+        if len(file_bytes) > 20 * 1024 * 1024:  # 20MB guard
+            raise HTTPException(status_code=400, detail="File too large. Maximum PDF size is 20MB.")
+
+        try:
+            policy_text = extract_and_clean_text(file_bytes)
+        except Exception as pdf_err:
+            print(f"PDF extraction error: {pdf_err}")
+            raise HTTPException(status_code=400, detail="Could not read the PDF. The file may be corrupted, password-protected, or image-only (scanned). Please try a text-based PDF.")
+
+        if not policy_text or len(policy_text.strip()) < 50:
+            raise HTTPException(status_code=400, detail="Could not extract sufficient text from the PDF. It may be a scanned/image-based document. Please use a text-based PDF.")
+
+        # 2. Generate Embedding — truncate to ~8000 chars (covers most policies without hitting limits)
+        truncated_text = policy_text[:8000]
         query_embedding = generate_embedding(truncated_text)
-        
-        # 3. Vector Similarity Search
-        # Note: This requires a Postgres RPC function named `match_labour_laws` to be created in Supabase.
-        # See Supabase pgvector documentation for the SQL to create this function.
-        similar_docs = supabase.rpc(
-            "match_labour_laws", 
-            {
-                "query_embedding": query_embedding, 
-                "match_threshold": 0.5, 
-                "match_count": 5
-            }
-        ).execute()
-        
-        context_texts = [doc['content'] for doc in similar_docs.data] if similar_docs.data else []
-        legal_context = "\n\n---\n\n".join(context_texts)
-        
+
+        # 3. Vector Similarity Search — fault-tolerant; falls back to general review if RPC unavailable
+        legal_context = ""
+        try:
+            similar_docs = supabase.rpc(
+                "match_labour_laws",
+                {
+                    "query_embedding": query_embedding,
+                    "match_threshold": 0.4,
+                    "match_count": 6
+                }
+            ).execute()
+            context_texts = [doc['content'] for doc in similar_docs.data] if similar_docs.data else []
+            legal_context = "\n\n---\n\n".join(context_texts)
+        except Exception as rpc_err:
+            print(f"Vector search unavailable (RPC error): {rpc_err}. Proceeding with general review.")
+
         if not legal_context:
-            legal_context = "No relevant legal context found in the database. Provide general review based on typical labour laws."
+            legal_context = "No specific legal context found in the knowledge base. Apply your expertise on the 4 Indian Labour Codes: Code on Wages 2019, Industrial Relations Code 2020, Code on Social Security 2020, and Occupational Safety Health and Working Conditions Code 2020."
 
         # 4. Generate Analysis with Selected Model
-        system_instructions = "You are an expert Indian Labour Law Compliance Auditor specializing in the 4 new Labour Codes (2020-2025). Review the Following Employee Policy against the provided Legal Context."
-        
+        system_instructions = """You are an expert Indian Labour Law Compliance Auditor specializing in the 4 new Labour Codes enacted in 2019-2020 (in effect from 2025):
+1. Code on Wages, 2019
+2. Industrial Relations Code, 2020
+3. Code on Social Security, 2020
+4. Occupational Safety, Health and Working Conditions Code, 2020
+
+Review the provided Employee Policy and identify specific compliance gaps or satisfied requirements. Be precise — cite specific sections/chapters of the codes."""
+
         prompt = f"""
 LEGAL CONTEXT (Relevant Sections of Indian Labour Codes):
 {legal_context}
 
-EMPLOYEE POLICY:
-{policy_text}
+EMPLOYEE POLICY TO AUDIT:
+{policy_text[:12000]}
 
-Analyze the policy for compliance with the legal context. For each finding, cite the specific Labour Code section violated or satisfied.
+Analyze the policy for compliance with the Indian Labour Codes above. Identify specific gaps, violations, or well-compliant clauses. Cite the relevant Code and section for each finding.
 
-Provide a strict JSON response in the following schema exactly (no markdown formatting, just raw JSON):
+Return ONLY a raw JSON object (no markdown, no code fences) in this exact schema:
 {{
-    "compliance_score": <number between 0 and 100, where 100 means FULLY COMPLIANT and 0 means CRITICALLY NON-COMPLIANT>,
+    "compliance_score": <integer 0-100, where 100=fully compliant, 0=critically non-compliant>,
     "findings": [
-        "<finding 1: describe the specific gap or compliance issue with the relevant law section>",
-        "<finding 2>",
-        "<finding 3>"
+        "<Finding 1: specific issue or compliance with law section reference>",
+        "<Finding 2>",
+        "<Finding 3>",
+        "<Finding 4>",
+        "<Finding 5>"
     ]
 }}
 """
         final_provider = "google"
-        final_model = "gemini-1.5-flash"
+        final_model = "gemini-2.5-flash"
         findings = []
         comp_score = 50
         p_tokens, c_tokens, t_tokens = 0, 0, 0
@@ -241,9 +277,9 @@ Provide a strict JSON response in the following schema exactly (no markdown form
                 c_tokens = response.usage.completion_tokens
                 t_tokens = response.usage.total_tokens
             else:
-                # Default: Gemini
+                # Default: Gemini 2.0 Flash
                 final_provider = "google"
-                final_model = "gemini-1.5-flash"
+                final_model = "gemini-2.5-flash"
                 response = genai_client.models.generate_content(
                     model=final_model,
                     contents=system_instructions + "\n\n" + prompt,
@@ -254,10 +290,10 @@ Provide a strict JSON response in the following schema exactly (no markdown form
                     c_tokens = response.usage_metadata.candidates_token_count
                     t_tokens = response.usage_metadata.total_token_count
         except Exception as ai_err:
-            print(f"Provider error ({model_id}): {ai_err}. Falling back to Gemini Flash.")
-            # Final Fallback to Gemini Flash if selected provider fails
+            print(f"Provider error ({model_id}): {ai_err}. Falling back to Gemini 2.0 Flash.")
+            # Final Fallback to Gemini 2.0 Flash if selected provider fails
             final_provider = "google"
-            final_model = "gemini-1.5-flash"
+            final_model = "gemini-2.5-flash"
             response = genai_client.models.generate_content(
                 model=final_model,
                 contents=system_instructions + "\n\n" + prompt,
@@ -388,6 +424,84 @@ async def reset_user_password(
         print(f"Password reset error: {e}")
         raise HTTPException(status_code=500, detail="Error resetting password.")
 
+@app.post("/admin/ingest-md")
+async def ingest_markdown(
+    file: UploadFile = File(...),
+    admin_user = Depends(get_current_user)
+):
+    """
+    Ingest a Markdown (.md) file into the pgvector knowledge base.
+    Chunks the text into ~500-word segments, embeds each with Gemini, and upserts to 'labour_laws'.
+    """
+    # 1. Verify admin
+    profile_res = supabase.table("profiles").select("role").eq("id", admin_user.id).execute()
+    if not profile_res.data or profile_res.data[0].get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required.")
+
+    # 2. Validate file type
+    if not (file.filename.endswith('.md') or 'markdown' in (file.content_type or '')):
+        raise HTTPException(status_code=400, detail="Only Markdown (.md) files are supported.")
+
+    try:
+        raw_bytes = await file.read()
+        if len(raw_bytes) > 5 * 1024 * 1024:  # 5MB limit
+            raise HTTPException(status_code=400, detail="File too large. Maximum size is 5MB.")
+
+        text = raw_bytes.decode('utf-8', errors='replace')
+        # Clean up excessive whitespace but preserve paragraph structure
+        text = re.sub(r'\n{3,}', '\n\n', text).strip()
+
+        # 3. Split into ~500-word chunks (roughly 3000 chars) with overlap
+        chunk_size = 3000
+        overlap = 300
+        chunks = []
+        start = 0
+        while start < len(text):
+            end = min(start + chunk_size, len(text))
+            # Try to break at a paragraph boundary
+            if end < len(text):
+                last_para = text.rfind('\n\n', start, end)
+                if last_para > start + overlap:
+                    end = last_para
+            chunk = text[start:end].strip()
+            if chunk:
+                chunks.append(chunk)
+            start = end - overlap if end < len(text) else len(text)
+
+        if not chunks:
+            raise HTTPException(status_code=400, detail="No content found in the file.")
+
+        # 4. Embed and upsert each chunk
+        ingested = 0
+
+        for i, chunk in enumerate(chunks):
+            try:
+                embedding = generate_embedding(chunk)
+                # Insert to labour_laws table — matches existing schema (content + embedding only)
+                supabase.table("labour_laws").insert({
+                    "content": chunk,
+                    "embedding": embedding,
+                }).execute()
+                ingested += 1
+            except Exception as chunk_err:
+                print(f"Error ingesting chunk {i}: {chunk_err}")
+                # Continue with remaining chunks
+
+        return {
+            "success": True,
+            "filename": file.filename,
+            "chunks_ingested": ingested,
+            "total_chunks": len(chunks),
+            "message": f"Successfully ingested {ingested}/{len(chunks)} chunks from '{file.filename}' into the knowledge base."
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Ingest error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to ingest document.")
+
+
 @app.get("/admin/stats", response_model=AdminStatsResponse)
 async def get_admin_stats(user = Depends(get_current_user)):
     # 1. Verify user is admin
@@ -409,7 +523,7 @@ async def get_admin_stats(user = Depends(get_current_user)):
     logs = logs_res.data if logs_res.data else []
 
     models_to_track = [
-        {"id": "gemini-1.5-flash", "provider": "google"},
+        {"id": "gemini-2.5-flash", "provider": "google"},
         {"id": "claude-3-5-sonnet", "provider": "anthropic"},
         {"id": "gpt-4o", "provider": "openai"}
     ]

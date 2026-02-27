@@ -105,7 +105,7 @@ export function UsageDashboard({ token, dailyLimit, role }: { token?: string, da
                                 <CardTitle className="text-sm font-medium">Estimated Session Cost</CardTitle>
                             </CardHeader>
                             <CardContent>
-                                <div className="text-3xl font-bold tracking-tight text-emerald-600">${estimatedCost.toFixed(5)}</div>
+                                <div className="text-3xl font-bold tracking-tight text-[#606C5A]">${estimatedCost.toFixed(5)}</div>
                                 <p className="text-xs text-muted-foreground mt-1">Based on Gemini Flash pricing</p>
                             </CardContent>
                         </Card>
@@ -130,17 +130,17 @@ export function UsageDashboard({ token, dailyLimit, role }: { token?: string, da
                                 <LineChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
                                     <defs>
                                         <linearGradient id="colorTokens" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                                            <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                                            <stop offset="5%" stopColor="#606C5A" stopOpacity={0.25} />
+                                            <stop offset="95%" stopColor="#606C5A" stopOpacity={0} />
                                         </linearGradient>
                                     </defs>
                                     <Line
                                         type="monotone"
                                         dataKey="tokens"
-                                        stroke="#10b981"
-                                        strokeWidth={3}
-                                        dot={{ r: 4, fill: '#10b981', strokeWidth: 2, stroke: '#fff' }}
-                                        activeDot={{ r: 6, fill: '#059669', stroke: '#fff' }}
+                                        stroke="#606C5A"
+                                        strokeWidth={2.5}
+                                        dot={{ r: 4, fill: '#606C5A', strokeWidth: 2, stroke: '#FFFFFC' }}
+                                        activeDot={{ r: 6, fill: '#4F5A4A', stroke: '#FFFFFC' }}
                                     />
                                     <CartesianGrid stroke="#f4f4f5" strokeDasharray="5 5" vertical={false} />
                                     <XAxis dataKey="time" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
@@ -196,8 +196,8 @@ export function UsageDashboard({ token, dailyLimit, role }: { token?: string, da
                                             </TableCell>
                                             <TableCell className="text-center">
                                                 {log.risk_score !== null && log.risk_score !== undefined ? (
-                                                    <span className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${100 - log.risk_score >= 80 ? 'bg-emerald-100 text-emerald-800' :
-                                                        100 - log.risk_score >= 50 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
+                                                    <span className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${100 - log.risk_score >= 70 ? 'bg-[#ECF0E8] text-[#606C5A]' :
+                                                        100 - log.risk_score >= 50 ? 'bg-[#F8F0DE] text-[#7A6020]' : 'bg-[#F5ECEA] text-[#8B4A42]'
                                                         }`}>
                                                         {100 - log.risk_score}
                                                     </span>
@@ -224,16 +224,16 @@ export function UsageDashboard({ token, dailyLimit, role }: { token?: string, da
                                                                 </CardDescription>
                                                             </DialogHeader>
                                                             <div className="space-y-6 pt-4">
-                                                                <div className="flex items-center justify-between p-4 bg-zinc-50 rounded-lg border">
+                                                                <div className="flex items-center justify-between p-4 bg-[#F3F3F2] rounded-lg border border-[#E6E4E0]">
                                                                     <div>
-                                                                        <div className="text-xs font-medium text-zinc-500 uppercase">Compliance Score</div>
-                                                                        <div className={`text-4xl font-black ${100 - (log.risk_score ?? 100) >= 80 ? 'text-emerald-600' : 100 - (log.risk_score ?? 100) >= 50 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                                                        <div className="text-xs font-medium text-[#8F837A] uppercase">Compliance Score</div>
+                                                                        <div className={`text-4xl font-black ${100 - (log.risk_score ?? 100) >= 70 ? 'text-[#606C5A]' : 100 - (log.risk_score ?? 100) >= 50 ? 'text-[#A68B2C]' : 'text-[#8B4A42]'}`}>
                                                                             {100 - (log.risk_score ?? 100)}
                                                                         </div>
                                                                     </div>
                                                                     <div className="text-right">
                                                                         <Badge variant="outline" className="px-3 py-1">
-                                                                            {100 - (log.risk_score ?? 100) >= 80 ? 'Compliant' : 100 - (log.risk_score ?? 100) >= 50 ? 'Moderate Risk' : 'Critical Non-Compliance'}
+                                                                            {100 - (log.risk_score ?? 100) >= 90 ? 'Likely Compliant' : 100 - (log.risk_score ?? 100) >= 70 ? 'Moderate Risk' : 100 - (log.risk_score ?? 100) >= 50 ? 'Significant Gaps' : 'Critical Non-Compliance'}
                                                                         </Badge>
                                                                     </div>
                                                                 </div>
@@ -359,9 +359,9 @@ export function UsageDashboard({ token, dailyLimit, role }: { token?: string, da
 
                                         {/* Expandable Breakdown Row */}
                                         {expandedRow === log.id && (
-                                            <TableRow className="bg-zinc-50 hover:bg-zinc-50">
+                                            <TableRow className="bg-[#FBFAF5] hover:bg-[#FBFAF5]">
                                                 <TableCell colSpan={4} className="p-0 border-b-0">
-                                                    <div className="px-6 py-4 grid grid-cols-2 max-w-sm gap-4 border-l-4 border-l-emerald-500">
+                                                    <div className="px-6 py-4 grid grid-cols-2 max-w-sm gap-4 border-l-4 border-l-[#606C5A]">
                                                         <div>
                                                             <div className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-1">Prompt Tokens</div>
                                                             <div className="text-sm font-semibold">{log.prompt_tokens.toLocaleString()} <span className="text-zinc-400 font-normal">tokens</span></div>

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { supabase } from './lib/supabase';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './components/ui/table';
@@ -9,9 +9,8 @@ import { Badge } from './components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "./components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "./components/ui/alert-dialog";
-import { Shield, Lock, Unlock, Mail, Loader2, UserX, UserCheck, Activity, KeyRound, Save, Eye, EyeOff, Zap, Clock, Globe, Users, AlertCircle, FileText, FileCheck, Calculator, FolderOpen, CalendarDays, AlertTriangle, TrendingUp } from 'lucide-react';
+import { Shield, Lock, Unlock, Mail, Loader2, UserX, UserCheck, Activity, KeyRound, Save, Eye, EyeOff, Zap, Clock, Globe, Users, AlertCircle, FileText, FileCheck, Calculator, FolderOpen, CalendarDays, AlertTriangle, TrendingUp, Upload, Database, CheckCircle2, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip as RechartsTooltip } from 'recharts';
 
 
 const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:8000' : '/api');
@@ -111,6 +110,12 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
     const [editingPlan, setEditingPlan] = useState<string | null>(null);
     const [isRefreshing, setIsRefreshing] = useState(false);
 
+    // Data Repository state
+    const [mdFile, setMdFile] = useState<File | null>(null);
+    const [isIngesting, setIsIngesting] = useState(false);
+    const [ingestResult, setIngestResult] = useState<{ success: boolean; chunks: number; filename: string } | null>(null);
+    const mdFileRef = useRef<HTMLInputElement>(null);
+
     // Tool icon map
     const toolIconMap: Record<string, React.ReactNode> = {
         'FileCheck': <FileCheck size={18} className="text-[#606C5A]" />,
@@ -145,88 +150,101 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
         return Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
     };
 
+    const handleIngestMd = async () => {
+        if (!mdFile) return;
+        setIsIngesting(true);
+        setIngestResult(null);
+        try {
+            const formData = new FormData();
+            formData.append('file', mdFile);
+            const res = await fetch(`${API_URL}/admin/ingest-md`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${session.access_token}` },
+                body: formData,
+            });
+            const data = await res.json();
+            if (res.ok) {
+                setIngestResult({ success: true, chunks: data.chunks_ingested, filename: mdFile.name });
+                toast.success(`"${mdFile.name}" ingested — ${data.chunks_ingested} chunks added to knowledge base.`);
+                setMdFile(null);
+                if (mdFileRef.current) mdFileRef.current.value = '';
+            } else {
+                setIngestResult({ success: false, chunks: 0, filename: mdFile.name });
+                toast.error(data.detail || 'Ingestion failed.');
+            }
+        } catch (e) {
+            toast.error('Error connecting to backend.');
+        }
+        setIsIngesting(false);
+    };
+
     const fetchData = async () => {
         setLoading(true);
-        // Fetch Profiles
-        const { data: profileData, error: profileError } = await supabase
-            .from('profiles')
-            .select('*')
-            .order('created_at', { ascending: false });
+        try {
+            // ✅ Run ALL queries in parallel — no sequential awaits
+            const [
+                { data: profileData, error: profileError },
+                { data: logData, error: logError },
+                { data: waitingData, error: waitingError },
+                { data: toolData },
+                { data: planData },
+            ] = await Promise.all([
+                supabase.from('profiles').select('*').order('created_at', { ascending: false }),
+                supabase.from('api_logs').select('*').order('created_at', { ascending: false }).limit(200),
+                supabase.from('waiting_list').select('*').order('created_at', { ascending: false }),
+                supabase.from('tool_config').select('*').order('sort_order', { ascending: true }),
+                supabase.from('plan_config').select('*').order('sort_order', { ascending: true }),
+            ]);
 
-        // Fetch Audit Logs for health & consumption
-        const { data: logData, error: logError } = await supabase
-            .from('api_logs')
-            .select('*')
-            .order('created_at', { ascending: false });
-
-        if (profileError) {
-            console.error("Error fetching profiles:", profileError);
-            toast.error("Failed to load user profiles.");
-        }
-
-        if (logError) {
-            console.error("Error fetching logs:", logError);
-        } else if (logData) {
-            setAuditLogs(logData);
-
-            // Calculate consumption for each profile
-            if (profileData) {
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-
-                const updatedProfiles = profileData.map(p => {
-                    const userLogs = logData.filter(l => l.user_id === p.id);
-                    const todayLogs = userLogs.filter(l => new Date(l.created_at) >= today);
-                    const totalTokens = userLogs.reduce((sum, l) => sum + (l.total_tokens || 0), 0);
-
-                    return {
-                        ...p,
-                        total_tokens_used: totalTokens,
-                        total_audits_done: userLogs.length,
-                        audits_used_today: todayLogs.length
-                    };
-                });
-                setProfiles(updatedProfiles);
+            if (profileError) {
+                console.error("Error fetching profiles:", profileError);
+                toast.error("Failed to load user profiles.");
             }
-        } else if (profileData) {
-            setProfiles(profileData);
+
+            if (logError) {
+                console.error("Error fetching logs:", logError);
+            } else if (logData) {
+                setAuditLogs(logData);
+
+                // Calculate per-user consumption from fetched logs
+                if (profileData) {
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+
+                    const updatedProfiles = profileData.map(p => {
+                        const userLogs = logData.filter(l => l.user_id === p.id);
+                        const todayLogs = userLogs.filter(l => new Date(l.created_at) >= today);
+                        const totalTokens = userLogs.reduce((sum, l) => sum + (l.total_tokens || 0), 0);
+                        return {
+                            ...p,
+                            total_tokens_used: totalTokens,
+                            total_audits_done: userLogs.length,
+                            audits_used_today: todayLogs.length
+                        };
+                    });
+                    setProfiles(updatedProfiles);
+                }
+            } else if (profileData) {
+                setProfiles(profileData);
+            }
+
+            if (waitingError) {
+                console.error("Error fetching waiting list:", waitingError);
+            } else if (waitingData) {
+                setWaitingList(waitingData);
+            }
+
+            if (toolData) setToolConfigs(toolData as ToolConfig[]);
+            if (planData) setPlanConfigs(planData as PlanConfig[]);
+
+            // Fetch model stats in parallel too (non-blocking for UI)
+            fetchStats();
+        } catch (err) {
+            console.error("fetchData error:", err);
+            toast.error("Failed to load admin data.");
+        } finally {
+            setLoading(false);
         }
-
-        // Fetch Stats
-        await fetchStats();
-
-        // Fetch Waiting List
-
-        // Fetch Waiting List
-        const { data: waitingData, error: waitingError } = await supabase
-            .from('waiting_list')
-            .select('*')
-            .order('created_at', { ascending: false });
-
-        if (waitingError) {
-            console.error("Error fetching waiting list:", waitingError);
-            toast.error("Failed to load access requests.");
-        } else if (waitingData) {
-            setWaitingList(waitingData);
-        }
-
-        // Fetch Tool Configs
-        const { data: toolData } = await supabase
-            .from('tool_config')
-            .select('*')
-            .order('sort_order', { ascending: true });
-
-        if (toolData) setToolConfigs(toolData as ToolConfig[]);
-
-        // Fetch Plan Configs
-        const { data: planData } = await supabase
-            .from('plan_config')
-            .select('*')
-            .order('sort_order', { ascending: true });
-
-        if (planData) setPlanConfigs(planData as PlanConfig[]);
-
-        setLoading(false);
     };
 
     const updateToolConfig = async (toolId: string, field: string, value: boolean | number) => {
@@ -313,61 +331,60 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
 
     const UserExpansion = ({ profile }: { profile: Profile }) => {
         const userLogs = auditLogs.filter(l => l.user_id === profile.id);
-        const modelData = [
-            { name: 'Gemini', value: userLogs.filter(l => l.model_id.includes('gemini')).length },
-            { name: 'Claude', value: userLogs.filter(l => l.model_id.includes('claude')).length },
-            { name: 'GPT', value: userLogs.filter(l => l.model_id.includes('gpt')).length },
-        ].filter(d => d.value > 0);
 
-        const COLORS = ['#10b981', '#8b5cf6', '#3b82f6'];
+        // Tool usage breakdown by model
+        const toolUsage = [
+            { model: 'gemini-1.5-flash', label: 'Gemini Flash', count: userLogs.filter(l => l.model_id?.includes('gemini')).length, tokens: userLogs.filter(l => l.model_id?.includes('gemini')).reduce((s, l) => s + (l.total_tokens || 0), 0) },
+            { model: 'claude-3-5-sonnet', label: 'Claude Sonnet', count: userLogs.filter(l => l.model_id?.includes('claude')).length, tokens: userLogs.filter(l => l.model_id?.includes('claude')).reduce((s, l) => s + (l.total_tokens || 0), 0) },
+            { model: 'gpt-4o', label: 'GPT-4o', count: userLogs.filter(l => l.model_id?.includes('gpt')).length, tokens: userLogs.filter(l => l.model_id?.includes('gpt')).reduce((s, l) => s + (l.total_tokens || 0), 0) },
+        ];
 
         return (
-            <div
-                className="bg-zinc-950/40 p-6 border-t border-zinc-800"
-            >
+            <div className="bg-[#FBFAF5] p-6 border-t border-[#E6E4E0]">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div className="space-y-4">
-                        <h4 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Model Preferences</h4>
-                        {modelData.length > 0 ? (
-                            <div className="h-[150px]">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <PieChart>
-                                        <Pie
-                                            data={modelData}
-                                            innerRadius={40}
-                                            outerRadius={60}
-                                            paddingAngle={5}
-                                            dataKey="value"
-                                        >
-                                            {modelData.map((_, index) => (
-                                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                            ))}
-                                        </Pie>
-                                        <RechartsTooltip />
-                                    </PieChart>
-                                </ResponsiveContainer>
-                            </div>
-                        ) : (
-                            <div className="h-[150px] flex items-center justify-center text-xs text-zinc-400 italic">No audit history recorded</div>
-                        )}
+                    <div className="space-y-3">
+                        <h4 className="text-[10px] font-bold uppercase tracking-wider text-[#8F837A]">Tool Usage Breakdown</h4>
+                        <div className="bg-[#FFFFFC] rounded-lg border border-[#E6E4E0] overflow-hidden">
+                            <table className="w-full text-[11px]">
+                                <thead>
+                                    <tr className="border-b border-[#E6E4E0] bg-[#F3F3F2]">
+                                        <th className="text-left px-3 py-2 text-[#8F837A] font-semibold uppercase tracking-wider text-[9px]">Model</th>
+                                        <th className="text-right px-3 py-2 text-[#8F837A] font-semibold uppercase tracking-wider text-[9px]">Runs</th>
+                                        <th className="text-right px-3 py-2 text-[#8F837A] font-semibold uppercase tracking-wider text-[9px]">Tokens</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {toolUsage.map(row => (
+                                        <tr key={row.model} className="border-b border-[#F3F3F2] last:border-0">
+                                            <td className="px-3 py-2 font-mono text-[#2C2A28]">{row.label}</td>
+                                            <td className="px-3 py-2 text-right font-mono text-[#5E5E5E]">{row.count}</td>
+                                            <td className="px-3 py-2 text-right font-mono text-[#5E5E5E]">{row.tokens.toLocaleString()}</td>
+                                        </tr>
+                                    ))}
+                                    {userLogs.length === 0 && (
+                                        <tr><td colSpan={3} className="px-3 py-4 text-center text-[#8F837A] italic">No audit history recorded</td></tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
-                    <div className="space-y-4">
-                        <h4 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Infrastructure Controls</h4>
-                        <div className="p-4 bg-white rounded-lg border border-zinc-200 space-y-4">
+                    <div className="space-y-3">
+                        <h4 className="text-[10px] font-bold uppercase tracking-wider text-[#8F837A]">Infrastructure Controls</h4>
+                        <div className="p-4 bg-[#FFFFFC] rounded-lg border border-[#E6E4E0] space-y-4">
                             <div className="flex items-center justify-between">
-                                <span className="text-xs font-medium text-zinc-700">Daily Audit Quota</span>
+                                <span className="text-xs font-medium text-[#2C2A28]">Daily Audit Quota</span>
                                 <div className="flex items-center gap-2">
                                     <input
                                         type="number"
                                         defaultValue={profile.daily_audit_limit}
                                         onBlur={(e) => updateLimit(profile.id, parseInt(e.target.value))}
-                                        className="w-16 h-8 text-xs border rounded px-2 focus:ring-1 focus:ring-emerald-500 outline-none"
+                                        className="w-16 h-8 text-xs border border-[#E6E4E0] rounded px-2 focus:ring-1 focus:ring-[#606C5A] outline-none bg-[#FBFAF5]"
                                     />
-                                    <span className="text-[10px] text-zinc-400">audits</span>
+                                    <span className="text-[10px] text-[#8F837A]">audits</span>
                                 </div>
                             </div>
                             <div className="flex items-center justify-between opacity-50 pointer-events-none">
-                                <span className="text-xs font-medium text-zinc-700">Token Ceiling</span>
+                                <span className="text-xs font-medium text-[#2C2A28]">Token Ceiling</span>
                                 <Badge variant="outline" className="text-[10px]">Unlimited</Badge>
                             </div>
                         </div>
@@ -376,8 +393,8 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
 
                 {/* Audit Trail Table */}
                 <div className="mt-8 space-y-3">
-                    <h4 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 px-1 flex items-center gap-2">
-                        <Activity size={14} className="text-emerald-500" /> Recent Audit Trail
+                    <h4 className="text-[10px] font-bold uppercase tracking-wider text-[#8F837A] px-1 flex items-center gap-2">
+                        <Activity size={14} className="text-[#606C5A]" /> Recent Audit Trail
                     </h4>
                     <div className="bg-white rounded-lg border border-zinc-200 overflow-hidden">
                         <Table>
@@ -623,6 +640,7 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                             <TabsTrigger value="governance" className="text-[13px] font-medium data-[state=active]:bg-white data-[state=active]:text-[#2C2A28] data-[state=active]:shadow-[0_1px_2px_rgba(95,87,80,0.06)] text-[#8F837A] rounded-md px-4 py-1.5 transition-all">Governance</TabsTrigger>
                             <TabsTrigger value="plans" className="text-[13px] font-medium data-[state=active]:bg-white data-[state=active]:text-[#2C2A28] data-[state=active]:shadow-[0_1px_2px_rgba(95,87,80,0.06)] text-[#8F837A] rounded-md px-4 py-1.5 transition-all">Plans & Tools</TabsTrigger>
                             <TabsTrigger value="system" className="text-[13px] font-medium data-[state=active]:bg-white data-[state=active]:text-[#2C2A28] data-[state=active]:shadow-[0_1px_2px_rgba(95,87,80,0.06)] text-[#8F837A] rounded-md px-4 py-1.5 transition-all">System</TabsTrigger>
+                            <TabsTrigger value="data" className="text-[13px] font-medium data-[state=active]:bg-white data-[state=active]:text-[#2C2A28] data-[state=active]:shadow-[0_1px_2px_rgba(95,87,80,0.06)] text-[#8F837A] rounded-md px-4 py-1.5 transition-all">Data Repo</TabsTrigger>
                         </TabsList>
 
                         <Button
@@ -976,8 +994,6 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                                 return (
                                     <div
                                         key={model.model_id}
-                                        className="transition-transform duration-300 ease-in-out"
-                                        style={isRefreshing ? { transform: 'scale(1.01)' } : {}}
                                     >
                                         <Card className="bg-[#FFFFFC] border-[#E6E4E0] shadow-[0_1px_3px_rgba(95,87,80,0.07)] overflow-hidden group hover:border-[#C0B4A8] transition-all duration-300">
                                             <div className={`h-1.5 w-full ${isExhausted ? 'bg-[#D32F2F]' : isCritical ? 'bg-[#F2A65A]' : 'bg-[#606C5A]/40'}`} />
@@ -1036,24 +1052,24 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                             <p className="text-[13px] text-[#8F837A] mt-1">Manage access requests, provision users, and monitor individual usage.</p>
                         </div>
                         <Tabs defaultValue="requests" className="w-full">
-                            <TabsList className="grid w-full max-w-2xl grid-cols-4 mb-8 bg-zinc-100/50 border border-zinc-200 p-1 rounded-xl">
-                                <TabsTrigger value="requests" className="relative data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm rounded-lg transition-all hover:bg-white/50 text-zinc-500 text-xs font-bold">
+                            <TabsList className="grid w-full max-w-2xl grid-cols-4 mb-8 bg-[#F3F3F2] border border-[#E6E4E0] p-1 rounded-xl">
+                                <TabsTrigger value="requests" className="relative data-[state=active]:bg-white data-[state=active]:text-[#2C2A28] data-[state=active]:shadow-[0_1px_2px_rgba(95,87,80,0.06)] rounded-lg transition-all hover:bg-white/50 text-[#8F837A] text-xs font-bold">
                                     Pending Requests
                                     {pendingRequests.length > 0 && (
-                                        <span className="absolute top-1.5 right-1.5 flex h-2 w-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]"></span>
+                                        <span className="absolute top-1.5 right-1.5 flex h-2 w-2 rounded-full bg-[#606C5A]"></span>
                                     )}
                                 </TabsTrigger>
-                                <TabsTrigger value="live" className="data-[state=active]:bg-white data-[state=active]:text-emerald-600 data-[state=active]:shadow-sm rounded-lg transition-all hover:bg-white/50 text-zinc-500 text-xs font-bold">Active Users</TabsTrigger>
-                                <TabsTrigger value="rejected" className="data-[state=active]:bg-white data-[state=active]:text-zinc-900 data-[state=active]:shadow-sm rounded-lg transition-all hover:bg-white/50 text-zinc-500 text-xs font-bold">Rejected Users</TabsTrigger>
-                                <TabsTrigger value="deleted" className="data-[state=active]:bg-white data-[state=active]:text-zinc-900 data-[state=active]:shadow-sm rounded-lg transition-all hover:bg-white/50 text-zinc-500 text-xs font-bold">Archive</TabsTrigger>
+                                <TabsTrigger value="live" className="data-[state=active]:bg-white data-[state=active]:text-[#606C5A] data-[state=active]:shadow-[0_1px_2px_rgba(95,87,80,0.06)] rounded-lg transition-all hover:bg-white/50 text-[#8F837A] text-xs font-bold">Active Users</TabsTrigger>
+                                <TabsTrigger value="rejected" className="data-[state=active]:bg-white data-[state=active]:text-[#2C2A28] data-[state=active]:shadow-[0_1px_2px_rgba(95,87,80,0.06)] rounded-lg transition-all hover:bg-white/50 text-[#8F837A] text-xs font-bold">Rejected</TabsTrigger>
+                                <TabsTrigger value="deleted" className="data-[state=active]:bg-white data-[state=active]:text-[#2C2A28] data-[state=active]:shadow-[0_1px_2px_rgba(95,87,80,0.06)] rounded-lg transition-all hover:bg-white/50 text-[#8F837A] text-xs font-bold">Archive</TabsTrigger>
                             </TabsList>
 
                             {/* TAB 1: ACCESS REQUESTS */}
                             <TabsContent value="requests" className="space-y-4 border-none p-0 outline-none">
-                                <Card className="bg-white border-zinc-200 shadow-sm border-t-4 border-t-blue-500">
+                                <Card className="bg-[#FFFFFC] border-[#E6E4E0] shadow-[0_1px_3px_rgba(95,87,80,0.07)] border-t-4 border-t-[#606C5A]">
                                     <CardHeader>
-                                        <CardTitle className="flex items-center gap-2 text-zinc-900"><Mail size={18} className="text-blue-500" /> Pending Invitations</CardTitle>
-                                        <CardDescription className="text-zinc-500">Review new organizations requesting access to the Auditor. Approving them will provision a new Auth account.</CardDescription>
+                                        <CardTitle className="flex items-center gap-2 text-[#2C2A28]"><Mail size={18} className="text-[#606C5A]" /> Pending Invitations</CardTitle>
+                                        <CardDescription className="text-[#8F837A]">Review new organizations requesting access to the Auditor. Approving them will provision a new Auth account.</CardDescription>
                                     </CardHeader>
                                     <CardContent>
                                         <Table>
@@ -1093,7 +1109,7 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                                                                             setIsApproveOpen(open);
                                                                         }}>
                                                                             <DialogTrigger asChild>
-                                                                                <Button size="sm" variant="outline" className="bg-blue-500/10 border-blue-500/20 text-blue-400 hover:bg-blue-500 hover:text-white transition-all">Approve</Button>
+                                                                                <Button size="sm" variant="outline" className="bg-[#ECF0E8] border-[#DCE4D5] text-[#606C5A] hover:bg-[#606C5A] hover:text-white transition-all">Approve</Button>
                                                                             </DialogTrigger>
                                                                             <DialogContent>
                                                                                 <DialogHeader>
@@ -1157,10 +1173,10 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
 
                             {/* TAB 2: APPROVED & LIVE */}
                             <TabsContent value="live" className="space-y-4">
-                                <Card className="bg-white border-zinc-200 shadow-sm border-t-4 border-t-emerald-500">
+                                <Card className="bg-[#FFFFFC] border-[#E6E4E0] shadow-[0_1px_3px_rgba(95,87,80,0.07)] border-t-4 border-t-[#606C5A]">
                                     <CardHeader>
-                                        <CardTitle className="flex items-center gap-2 text-zinc-900"><UserCheck size={18} className="text-emerald-500" /> Active Organizations</CardTitle>
-                                        <CardDescription className="text-zinc-500">Manage daily quotas, suspend access, or archive users.</CardDescription>
+                                        <CardTitle className="flex items-center gap-2 text-[#2C2A28]"><UserCheck size={18} className="text-[#606C5A]" /> Active Organizations</CardTitle>
+                                        <CardDescription className="text-[#8F837A]">Manage daily quotas, suspend access, or archive users.</CardDescription>
                                     </CardHeader>
                                     <CardContent>
                                         <Table>
@@ -1189,13 +1205,13 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                                                             >
                                                                 <TableCell className="font-medium">
                                                                     <div className="flex items-center gap-3">
-                                                                        <div className="w-8 h-8 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 text-xs font-bold">
+                                                                        <div className="w-8 h-8 rounded-full bg-[#ECF0E8] border border-[#DCE4D5] flex items-center justify-center text-[#606C5A] text-xs font-bold">
                                                                             {profile.full_name?.charAt(0) || 'U'}
                                                                         </div>
                                                                         <div>
                                                                             <div className="flex items-center gap-2">
                                                                                 <span className="text-sm font-semibold text-zinc-900">{profile.full_name || 'N/A'}</span>
-                                                                                {profile.role === 'admin' && <Badge variant="outline" className="bg-emerald-50 text-emerald-600 border-emerald-100 text-[10px] h-4">Admin</Badge>}
+                                                                                {profile.role === 'admin' && <Badge variant="outline" className="bg-[#ECF0E8] text-[#606C5A] border-[#DCE4D5] text-[10px] h-4">Admin</Badge>}
                                                                             </div>
                                                                             <div className="text-[10px] text-zinc-400 uppercase tracking-wider font-bold">{profile.role}</div>
                                                                         </div>
@@ -1361,10 +1377,10 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
 
                             {/* TAB 3: REJECTED */}
                             <TabsContent value="rejected" className="space-y-4">
-                                <Card className="bg-white border-zinc-200 shadow-sm border-t-4 border-t-red-500">
+                                <Card className="bg-[#FFFFFC] border-[#E6E4E0] shadow-[0_1px_3px_rgba(95,87,80,0.07)] border-t-4 border-t-[#8B4A42]">
                                     <CardHeader>
-                                        <CardTitle className="flex items-center gap-2 text-zinc-900"><UserX size={18} className="text-red-500" /> Rejected Requests</CardTitle>
-                                        <CardDescription className="text-zinc-500">Applications that were declined access. You can revert them to pending if needed.</CardDescription>
+                                        <CardTitle className="flex items-center gap-2 text-[#2C2A28]"><UserX size={18} className="text-[#8B4A42]" /> Rejected Requests</CardTitle>
+                                        <CardDescription className="text-[#8F837A]">Applications that were declined access. You can revert them to pending if needed.</CardDescription>
                                     </CardHeader>
                                     <CardContent>
                                         <Table>
@@ -1404,10 +1420,10 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
 
                             {/* TAB 4: DELETED */}
                             <TabsContent value="deleted" className="space-y-4">
-                                <Card className="bg-white border-zinc-200 shadow-sm border-t-4 border-t-zinc-400">
+                                <Card className="bg-[#FFFFFC] border-[#E6E4E0] shadow-[0_1px_3px_rgba(95,87,80,0.07)] border-t-4 border-t-[#C0B4A8]">
                                     <CardHeader>
-                                        <CardTitle className="flex items-center gap-2 text-zinc-900"><UserX size={18} className="text-zinc-500" /> Deleted Archive</CardTitle>
-                                        <CardDescription className="text-zinc-500">Accounts that have been permanently removed from active service.</CardDescription>
+                                        <CardTitle className="flex items-center gap-2 text-[#2C2A28]"><UserX size={18} className="text-[#8F837A]" /> Deleted Archive</CardTitle>
+                                        <CardDescription className="text-[#8F837A]">Accounts that have been permanently removed from active service.</CardDescription>
                                     </CardHeader>
                                     <CardContent>
                                         <Table>
@@ -1444,6 +1460,122 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                             </TabsContent>
                         </Tabs>
                     </TabsContent>
+                    {/* DATA REPOSITORY TAB */}
+                    <TabsContent value="data" className="space-y-6 outline-none">
+                        <div className="mb-4">
+                            <h2 className="font-serif text-xl tracking-tight text-[#2C2A28]">Knowledge Base</h2>
+                            <p className="text-[13px] text-[#8F837A] mt-1">Upload Markdown files to expand the legal knowledge base used for compliance audits.</p>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            {/* Upload Panel */}
+                            <Card className="bg-[#FFFFFC] border-[#E6E4E0] shadow-[0_1px_3px_rgba(95,87,80,0.07)]">
+                                <CardHeader className="pb-3 border-b border-[#E6E4E0]">
+                                    <CardTitle className="text-[15px] font-medium text-[#2C2A28] flex items-center gap-2">
+                                        <Upload size={16} className="text-[#606C5A]" />
+                                        Upload Document
+                                    </CardTitle>
+                                    <CardDescription className="text-[12px] text-[#8F837A]">
+                                        Upload a <code className="font-mono text-[11px] bg-[#F3F3F2] px-1 rounded">.md</code> file. It will be chunked, embedded with Gemini, and upserted to the pgvector knowledge base.
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="pt-5 space-y-5">
+                                    {/* Drop target */}
+                                    <div
+                                        className={`border-2 border-dashed rounded-lg p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-colors ${mdFile ? 'border-[#606C5A] bg-[#ECF0E8]/30' : 'border-[#E6E4E0] bg-[#F3F3F2]/40 hover:border-[#C0B4A8]'}`}
+                                        onClick={() => mdFileRef.current?.click()}
+                                        onDragOver={(e) => e.preventDefault()}
+                                        onDrop={(e) => {
+                                            e.preventDefault();
+                                            const f = e.dataTransfer.files[0];
+                                            if (f && (f.name.endsWith('.md') || f.type === 'text/markdown')) {
+                                                setMdFile(f);
+                                                setIngestResult(null);
+                                            } else {
+                                                toast.error('Only Markdown (.md) files are supported.');
+                                            }
+                                        }}
+                                    >
+                                        <input
+                                            ref={mdFileRef}
+                                            type="file"
+                                            accept=".md,text/markdown"
+                                            className="hidden"
+                                            onChange={(e) => {
+                                                const f = e.target.files?.[0];
+                                                if (f) { setMdFile(f); setIngestResult(null); }
+                                            }}
+                                        />
+                                        <Database size={28} className={`mb-3 ${mdFile ? 'text-[#606C5A]' : 'text-[#C0B4A8]'}`} />
+                                        {mdFile ? (
+                                            <>
+                                                <p className="text-[13px] font-medium text-[#2C2A28]">{mdFile.name}</p>
+                                                <p className="text-[11px] text-[#8F837A] mt-1">{(mdFile.size / 1024).toFixed(1)} KB — Ready to ingest</p>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <p className="text-[13px] font-medium text-[#5E5E5E]">Click or drag a Markdown file here</p>
+                                                <p className="text-[11px] text-[#8F837A] mt-1">Supports .md files up to 5 MB</p>
+                                            </>
+                                        )}
+                                    </div>
+
+                                    {/* Result feedback */}
+                                    {ingestResult && (
+                                        <div className={`flex items-start gap-3 p-3 rounded-lg border text-[12px] ${ingestResult.success ? 'bg-[#ECF0E8] border-[#DCE4D5] text-[#606C5A]' : 'bg-[#F5ECEA] border-[#E8C4C0] text-[#8B4A42]'}`}>
+                                            {ingestResult.success
+                                                ? <CheckCircle2 size={15} className="mt-0.5 shrink-0" />
+                                                : <XCircle size={15} className="mt-0.5 shrink-0" />}
+                                            <span>
+                                                {ingestResult.success
+                                                    ? <><strong>{ingestResult.filename}</strong> ingested successfully — <strong>{ingestResult.chunks}</strong> chunks added to vector store.</>
+                                                    : <>Failed to ingest <strong>{ingestResult.filename}</strong>. Check backend logs.</>}
+                                            </span>
+                                        </div>
+                                    )}
+
+                                    <Button
+                                        className="w-full bg-[#606C5A] hover:bg-[#4F5A4A] text-white gap-2"
+                                        disabled={!mdFile || isIngesting}
+                                        onClick={handleIngestMd}
+                                    >
+                                        {isIngesting ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
+                                        {isIngesting ? 'Ingesting…' : 'Ingest to Knowledge Base'}
+                                    </Button>
+                                </CardContent>
+                            </Card>
+
+                            {/* Instructions panel */}
+                            <Card className="bg-[#FBFAF5] border-[#E6E4E0] shadow-[0_1px_2px_rgba(95,87,80,0.04)]">
+                                <CardHeader className="pb-3 border-b border-[#E6E4E0]">
+                                    <CardTitle className="text-[15px] font-medium text-[#2C2A28] flex items-center gap-2">
+                                        <FileText size={16} className="text-[#606C5A]" />
+                                        How It Works
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent className="pt-5 space-y-4 text-[12px] text-[#5E5E5E]">
+                                    <div className="space-y-3">
+                                        {[
+                                            { step: '1', text: 'Upload a .md file containing legal text, Labour Code sections, or compliance guidance.' },
+                                            { step: '2', text: 'The backend splits the file into ~500-word chunks for optimal retrieval granularity.' },
+                                            { step: '3', text: 'Each chunk is embedded using Gemini Embeddings (768 dimensions) and upserted to the pgvector table.' },
+                                            { step: '4', text: 'During audits, the vector search retrieves the top-5 most relevant chunks as legal context for the AI.' },
+                                        ].map(item => (
+                                            <div key={item.step} className="flex items-start gap-3">
+                                                <span className="w-5 h-5 rounded-full bg-[#ECF0E8] text-[#606C5A] text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">{item.step}</span>
+                                                <p className="leading-relaxed">{item.text}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="border-t border-[#E6E4E0] pt-4 space-y-1">
+                                        <p className="text-[11px] text-[#8F837A] font-semibold uppercase tracking-wider">Recommended Sources</p>
+                                        <p className="text-[11px] text-[#8F837A]">Code on Wages 2019, OSHWC Code 2020, Industrial Relations Code 2020, Social Security Code 2020, applicable state rules, and EPFO/ESIC circulars.</p>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </div>
+                    </TabsContent>
+
                 </div>
             </Tabs>
         </div>
