@@ -338,7 +338,7 @@ export default function App() {
                 className={`flex items-center gap-2 transition-colors ${currentTab === 'usage' ? 'text-zinc-900' : 'text-zinc-500 hover:text-zinc-900'}`}
               >
                 <Activity className="w-4 h-4" />
-                Usage
+                Audit Logs
               </button>
               {profile?.role === 'admin' && (
                 <button
@@ -351,14 +351,16 @@ export default function App() {
               )}
             </div>
 
-            <Badge
-              variant="outline"
-              className="cursor-pointer bg-white px-3 py-1 font-mono hover:bg-zinc-100 transition-colors"
-              onClick={() => setCurrentTab('usage')}
-            >
-              <Zap className="w-3.5 h-3.5 mr-1.5 fill-yellow-400 text-yellow-500" />
-              {totalTokens.toLocaleString()} Session Usage
-            </Badge>
+            {profile?.role === 'admin' && (
+              <Badge
+                variant="outline"
+                className="cursor-pointer bg-white px-3 py-1 font-mono hover:bg-zinc-100 transition-colors"
+                onClick={() => setCurrentTab('usage')}
+              >
+                <Zap className="w-3.5 h-3.5 mr-1.5 fill-yellow-400 text-yellow-500" />
+                {totalTokens.toLocaleString()} Session Usage
+              </Badge>
+            )}
 
             <Button variant="ghost" size="sm" onClick={() => supabase.auth.signOut()} className="text-zinc-500 hover:text-zinc-900">
               Sign Out
@@ -374,10 +376,10 @@ export default function App() {
         ) : currentTab === 'usage' ? (
           <div className="max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="mb-8">
-              <h1 className="text-3xl font-bold tracking-tight">API Usage Dashboard</h1>
-              <p className="text-zinc-500 mt-2">Monitor your AI token consumption and audit history.</p>
+              <h1 className="text-3xl font-bold tracking-tight">Audit Logs & History</h1>
+              <p className="text-zinc-500 mt-2">Monitor your compliance audit history and details.</p>
             </div>
-            <UsageDashboard token={session?.access_token} dailyLimit={profile?.daily_audit_limit} />
+            <UsageDashboard token={session?.access_token} dailyLimit={profile?.daily_audit_limit} role={profile?.role} />
           </div>
         ) : (
           <div className="max-w-4xl mx-auto align-top">

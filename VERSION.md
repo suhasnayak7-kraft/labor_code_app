@@ -10,6 +10,7 @@
 
 | Version | Object | System | Stage | Date | Mission Summary |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| **v1.3** | **Rigil Kentaurus** | **Alpha Centauri** | **ALPHA** | 2026-02-28 | **UX & Reporting**: Audit Logs refinements, PDF export, and Role-based UI. |
 | **v1.2** | **Proxima c** | **Alpha Centauri** | **ALPHA** | 2026-02-27 | **Security Hardening**: Audit, Sourcemaps, and Env Validation. |
 | **v1.1** | **Proxima b** | **Alpha Centauri** | **ALPHA** | 2026-02-26 | **Cloud Integration**: Vercel deployment and routing fixes. |
 | **v1.0** | **Proxima Centauri** | **Alpha Centauri** | **ALPHA** | 2026-02-26 | **Core Engine**: Compliance scoring and PDF reporting. |
@@ -24,6 +25,13 @@
 ---
 
 ## 🛰 Mission Reports
+
+### [v1.3] Rigil Kentaurus (2026-02-28) - ALPHA
+- Renamed 'Usage' dashboard to 'Audit Logs' for end-user clarity.
+- Implemented role-based conditional rendering (Admin vs. Standard User).
+- Added 'View Report' modal containing detailed AI audit findings.
+- Integrated `jsPDF` for branded audit result exports.
+- Added system-wide button hover scale animations.
 
 ### [v1.2] Proxima c (2026-02-27) - ALPHA
 - Implemented `SECURITY_CHECKLIST.md` auditing.

@@ -221,7 +221,8 @@ Score guidance:
                 "total_tokens": response.usage_metadata.total_token_count,
                 "filename": file.filename,
                 "risk_score": 100 - compliance_score,  # keep DB field for backward compat
-                "user_id": user.id
+                "user_id": user.id,
+                "findings": parsed_response.get("findings", [])
             }).execute()
         else:
             supabase.table("api_logs").insert({
@@ -231,7 +232,8 @@ Score guidance:
                 "total_tokens": 0,
                 "filename": file.filename,
                 "risk_score": 100 - compliance_score,
-                "user_id": user.id
+                "user_id": user.id,
+                "findings": parsed_response.get("findings", [])
             }).execute()
 
         return AuditResponse(
