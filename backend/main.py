@@ -59,6 +59,16 @@ class AuditResponse(BaseModel):
     provider: str
     response_time_ms: int
 
+class ModelStat(BaseModel):
+    model_id: str
+    provider: str
+    status: str
+    rpm: int
+    tpm: int
+
+class AdminStatsResponse(BaseModel):
+    models: list[ModelStat]
+
 class UserCreateRequest(BaseModel):
     email: str
     password: str
@@ -377,3 +387,45 @@ async def reset_user_password(
     except Exception as e:
         print(f"Password reset error: {e}")
         raise HTTPException(status_code=500, detail="Error resetting password.")
+
+@app.get("/admin/stats", response_model=AdminStatsResponse)
+async def get_admin_stats(user = Depends(get_current_user)):
+    # 1. Verify user is admin
+    profile_res = supabase.table("profiles").select("role").eq("id", user.id).single().execute()
+    if not profile_res.data or profile_res.data.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    # 2. Check provider connectivity
+    key_status = {
+        "google": "Active" if os.environ.get("GEMINI_API_KEY") else "Inactive",
+        "anthropic": "Active" if os.environ.get("ANTHROPIC_API_KEY") else "Inactive",
+        "openai": "Active" if os.environ.get("OPENAI_API_KEY") else "Inactive"
+    }
+
+    # 3. Aggregate 60s logs
+    from datetime import timedelta
+    sixty_seconds_ago = (datetime.utcnow() - timedelta(seconds=60)).isoformat()
+    logs_res = supabase.table("api_logs").select("model_id, total_tokens").gte("created_at", sixty_seconds_ago).execute()
+    logs = logs_res.data if logs_res.data else []
+
+    models_to_track = [
+        {"id": "gemini-1.5-flash", "provider": "google"},
+        {"id": "claude-3-5-sonnet", "provider": "anthropic"},
+        {"id": "gpt-4o", "provider": "openai"}
+    ]
+
+    stats = []
+    for m in models_to_track:
+        model_logs = [l for l in logs if l.get("model_id") == m["id"]]
+        rpm = len(model_logs)
+        tpm = sum(l.get("total_tokens", 0) for l in model_logs)
+        
+        stats.append(ModelStat(
+            model_id=m["id"],
+            provider=m["provider"],
+            status=key_status.get(m["provider"], "Inactive"),
+            rpm=rpm,
+            tpm=tpm
+        ))
+
+    return AdminStatsResponse(models=stats)
