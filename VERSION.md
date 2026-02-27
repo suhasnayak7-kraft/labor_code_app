@@ -2,7 +2,8 @@
 
 > **Current Version:** v1.3.1 (Rigil Kentaurus B)
 > **Mission Stage:** 🔴 ALPHA BUILD (Internal Testing)
-> **Rule:** Every **Major Version (vX.0)** jumps to a new star system. **Minor Versions (vX.y)** are planets/objects within that system, moving further from the star.
+> **Timeline (Singularity):** The stable core of the project.
+> **Multiverse (Verses):** Parallel feature branches where the future is written.
 
 ---
 
@@ -56,11 +57,17 @@
 
 ---
 
-## 🛠 Naming System: "The Interstellar Rule"
+## 🛠 The Multiverse Manifest
 
-- **v0.x (Sol System):** ALPHA BUILD 1. Planets (Mercury → Mars) then Asteroids.
-- **v1.x (Alpha Centauri):** ALPHA BUILD 2. The star (Proxima) then its planets (b → c).
-- **v2.x (Barnard's Star):** NEXT STAR SYSTEM. Beta Build 1 (When user testing starts).
+- **Branches**:
+    - **`Singularity` (Main)**: The single source of truth. Stable and deployment-ready.
+    - **`Verse X` (Features/Experiments)**: Parallel realities where we build new worlds (e.g., `Verse-Audit-Logs`).
+    - **`Wormhole` (Patches)**: Rapid shortcuts to fix critical tears in the space-time (Hotfixes).
+
+- **Versions**:
+    - **v0.x (Sol System):** ALPHA PHASE I. (Mercury → Mars → Asteroids).
+    - **v1.x (Alpha Centauri):** ALPHA PHASE II. (Proxima → Rigil Kentaurus).
+    - **v2.x (Barnard's Star):** BETA PHASE. (When external life/users start testing).
 
 ---
 *Next destination: Barnard's Star (v2.0) - Entering THE BETA SECTOR...*
