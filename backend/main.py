@@ -5,8 +5,10 @@ import json
 import time
 from datetime import datetime
 from typing import Optional
-from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Header, Form
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Header, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+import traceback
 from pypdf import PdfReader
 from dotenv import load_dotenv
 from google import genai
@@ -51,6 +53,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    err_msg = traceback.format_exc()
+    print(f"Global UI Error Catcher: {err_msg}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Uncaught Python Error: {str(exc)} | Trace: {err_msg[:300]}"}
+    )
 
 class AuditResponse(BaseModel):
     compliance_score: int
