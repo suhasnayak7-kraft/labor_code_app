@@ -1,7 +1,7 @@
 # AuditAI — Labour Code Compliance App
 ## Full Context Document for New Sessions
 
-> **Purpose of this doc:** Drop this into any new Claude session along with the project folder to get full context instantly. Last updated: Feb 2026.
+> **Purpose of this doc:** Drop this into any new Claude session along with the project folder to get full context instantly. Last updated: Feb 28, 2026.
 
 ---
 
@@ -27,12 +27,12 @@
 |---|---|---|
 | Frontend | React + Vite + TypeScript | ShadCN UI, Framer Motion, Tailwind CSS |
 | Backend | FastAPI (Python) | Deployed as Vercel serverless function |
-| Database | Supabase (PostgreSQL) | pgvector for similarity search |
-| AI Model | Gemini 2.5 Flash | ~₹0.09 per audit — very cheap |
-| Embeddings | gemini-embedding-001 | 768 dimensions, essentially free at MVP scale |
+| Database | Supabase (PostgreSQL + pgvector) | Vector similarity search |
+| AI Model | Gemini 2.5 Flash | ~₹0.09 per audit |
+| Embeddings | gemini-embedding-001 | 768 dimensions, free at MVP scale |
 | Auth | Supabase Auth | Email/password, JWT tokens |
-| Deployment | Vercel free tier | Frontend static + backend serverless at /api/* |
-| Version Control | GitHub | Auto-deploys on push to main |
+| Deployment | Vercel free tier | Frontend static + backend serverless at `/api/*` |
+| Version Control | GitHub | Auto-deploys on push to `main` |
 
 ---
 
@@ -105,7 +105,7 @@ id        bigserial PRIMARY KEY
 content   text                    -- 1000-char chunks of the Labour Code PDF
 embedding vector(768)             -- Gemini embedding-001 embeddings
 ```
-- **122 rows** as of Feb 2026 (ingest.py has been run — do NOT run again or you'll duplicate)
+- **122 rows** as of Feb 28, 2026 (ingest.py has been run — do NOT run again or you'll duplicate)
 - Source PDF: `backend/labor_code_2025.pdf`
 - **RLS:** Enabled. Authenticated users can SELECT. Only service key can INSERT/UPDATE/DELETE.
 
@@ -123,7 +123,7 @@ is_locked         boolean     -- admin can lock accounts
 is_deleted        boolean     -- soft delete
 created_at        timestamptz
 ```
-- **2 users** as of Feb 2026
+- **2 users** as of Feb 28, 2026
   - Admin: `suhasnayak7@gmail.com` (UID: `4c7a380a-cc14-4d53-8216-2e02cca3f018`)
   - Test user: `suhasanayak7@gmail.com` (UID: `9ad0e4fd-1341-494d-8dd1-931357d1d1e9`)
 - First user registered automatically becomes admin (via `handle_new_user` trigger)
@@ -140,7 +140,7 @@ total_tokens      int
 risk_score        int         -- stored as (100 - compliance_score) for backward compat
 created_at        timestamptz
 ```
-- **6 rows** as of Feb 2026 (6 test audits done)
+- **6 rows** as of Feb 28, 2026 (6 test audits done)
 - **RLS:** Users see only their own logs. Admins see all.
 
 #### `waiting_list` — Pre-launch Signups

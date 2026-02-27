@@ -1,6 +1,6 @@
 # 🔒 Security Checklist for Vibe-Coded MVP (Free Tier)
 
-**Stack:** Vercel | Gemini API | Supabase | Next.js
+**Stack:** Vercel | Gemini API | Supabase | React + Vite + TypeScript (frontend) | FastAPI (backend)
 **Last Updated:** February 27, 2026
 **Status:** ⚠️ PRE-LAUNCH SECURITY REVIEW
 
@@ -28,12 +28,9 @@
 **What to check:**
 
 ```bash
-# Search for exposed secrets
-grep -r "GEMINI_API_KEY" --include="*.ts" --include="*.tsx" --include="*.js"
-grep -r "sk_live_\|sk_test_\|eyJ" . --include="*.env*" 
-grep -r "NEXT_PUBLIC_SUPABASE_ANON_KEY" --include="*.env*"
-grep -r "SUPABASE_SERVICE_ROLE_KEY" --include="*.ts" --include="*.tsx"
-grep -r "STRIPE_SECRET\|OPENAI_API_KEY" . --include="*.ts"
+# Search for exposed secrets in source files
+grep -r "GEMINI_API_KEY" --include="*.ts" --include="*.tsx" --include="*.py" frontend/ backend/
+grep -r "SUPABASE_KEY\|SUPABASE_SERVICE" --include="*.ts" --include="*.tsx" frontend/
 
 # Check git history for secrets (even if deleted)
 git log --all -p | grep -i "api_key\|sk_live_\|Bearer\|ghp_"
@@ -42,12 +39,11 @@ git log --all -p | grep -i "api_key\|sk_live_\|Bearer\|ghp_"
 **Checklist:**
 
 - [ ] No secrets hardcoded in source files
-- [ ] `.env.local` and `.env.*.local` exist in `.gitignore`
 - [ ] `.env` file in `.gitignore` (never commit environment files)
 - [ ] No API keys in git history (`git log --all -p` contains no secrets)
-- [ ] `SUPABASE_SERVICE_ROLE_KEY` does NOT have `NEXT_PUBLIC_` prefix
-- [ ] `GEMINI_API_KEY` does NOT have `NEXT_PUBLIC_` prefix
-- [ ] No secrets in comments like `// GEMINI_API_KEY=sk_...`
+- [ ] `SUPABASE_KEY` (service role) does NOT have `VITE_` prefix — stays backend-only
+- [ ] `GEMINI_API_KEY` does NOT have `VITE_` prefix — stays backend-only
+- [ ] No secrets in comments like `// GEMINI_API_KEY=...`
 - [ ] No secrets in error messages or logging
 
 **Current Status:**
@@ -72,18 +68,12 @@ git log --all -p | grep -i "api_key\|sk_live_\|Bearer\|ghp_"
 
 ```
 .env
-.env.local
-.env.*.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*
 ```
 
 **Checklist:**
 
 - [ ] `.env` is in `.gitignore`
-- [ ] `.env.local` is in `.gitignore`
-- [ ] `.env.*.local` is in `.gitignore`
 - [ ] No environment files are staged: `git status | grep .env`
 - [ ] Clean git history: no commits with `.env` files
 
@@ -99,33 +89,27 @@ git log --all -p | grep -i "api_key\|sk_live_\|Bearer\|ghp_"
 **Impact:** Secrets bundled into client JavaScript, visible in browser  
 **Effort:** 3 minutes
 
-**These secrets must NEVER be prefixed with `NEXT_PUBLIC_`:**
+**These secrets must NEVER have the `VITE_` prefix** (Vite bundles all `VITE_` vars into the client-side JavaScript):
 
 ```
-SUPABASE_SERVICE_ROLE_KEY    ❌ Never public
-GEMINI_API_KEY               ❌ Never public
-STRIPE_SECRET_KEY            ❌ Never public
-OPENAI_API_KEY               ❌ Never public
-DATABASE_URL                 ❌ Never public (write access)
-SMTP_PASSWORD                ❌ Never public
-JWT_SECRET                   ❌ Never public
+SUPABASE_KEY                 ❌ Never public (service role — full DB access)
+GEMINI_API_KEY               ❌ Never public (backend only)
 ```
 
-**These are OK to be public (read-only, safe):**
+**These are OK with `VITE_` prefix (read-only, safe for browser):**
 
 ```
-NEXT_PUBLIC_SUPABASE_URL     ✅ OK (connection endpoint)
-NEXT_PUBLIC_SUPABASE_ANON_KEY ✅ OK (limited read access only)
-NEXT_PUBLIC_GEMINI_MODEL     ✅ OK (just a model name)
+VITE_SUPABASE_URL            ✅ OK (connection endpoint)
+VITE_SUPABASE_ANON_KEY       ✅ OK (limited read access, protected by RLS)
+VITE_API_URL                 ✅ OK (just a URL, leave empty in Vercel)
 ```
 
 **Checklist:**
 
-- [ ] `SUPABASE_SERVICE_ROLE_KEY` has NO `NEXT_PUBLIC_` prefix
-- [ ] `GEMINI_API_KEY` has NO `NEXT_PUBLIC_` prefix
-- [ ] All secret keys are in `.env.local` (server-side only)
-- [ ] Only read-only public keys use `NEXT_PUBLIC_` prefix
-- [ ] Verified in: `.env.local`, `.env.example`, deployment config
+- [ ] `SUPABASE_KEY` (service role) has NO `VITE_` prefix
+- [ ] `GEMINI_API_KEY` has NO `VITE_` prefix
+- [ ] Only read-only public keys use `VITE_` prefix
+- [ ] Verified in: `.env`, Vercel dashboard environment variables
 
 **Current Status:**
 - [ ] Verified
@@ -170,25 +154,28 @@ grep -r "dangerouslySetInnerHTML\|{.*}.*html" --include="*.tsx"
 **Impact:** Source maps let attacker reconstruct original code + secrets  
 **Effort:** 2 minutes
 
-**Check `next.config.js`:**
+**Check `frontend/vite.config.ts`:**
 
-```javascript
+```typescript
 // ❌ DANGEROUS in production
-const nextConfig = {
-  productionBrowserSourceMaps: true, // Source maps exposed
-};
+export default defineConfig({
+  build: {
+    sourcemap: true,  // Exposes original source to anyone
+  },
+});
 
 // ✅ SAFE
-const nextConfig = {
-  productionBrowserSourceMaps: false, // Disabled in production
-};
+export default defineConfig({
+  build: {
+    sourcemap: false,  // Disabled — no source maps in production bundle
+  },
+});
 ```
 
 **Checklist:**
 
-- [ ] `productionBrowserSourceMaps` is NOT set to `true` in production
-- [ ] Source maps are disabled in `next.config.js`
-- [ ] `.env.production` contains no secrets (or doesn't exist)
+- [ ] `build.sourcemap` is NOT `true` in `vite.config.ts`
+- [ ] Source maps are disabled in production Vite config
 - [ ] Vercel deployment does NOT have "Generate source maps" enabled
 
 **Current Status:**
@@ -203,66 +190,56 @@ const nextConfig = {
 **Impact:** Silent failures, undefined behavior, quota burned  
 **Effort:** 5 minutes
 
-**Create `lib/validate-env.ts`:**
+**Frontend: Create `frontend/src/lib/validate-env.ts`** (Vite exposes vars via `import.meta.env`):
 
 ```typescript
 /**
- * Validates required environment variables exist at app startup.
- * This prevents silent failures where the app starts but API calls fail.
- * Call this in your root layout or middleware initialization.
+ * Validates required Vite environment variables at app startup.
+ * Called once in main.tsx before React mounts — fails fast if config is missing.
  */
-
 export function validateEnvironment() {
-  // Only run on server-side
-  if (typeof window !== 'undefined') return;
-
   const required = [
-    'NEXT_PUBLIC_SUPABASE_URL',
-    'NEXT_PUBLIC_SUPABASE_ANON_KEY',
-    'SUPABASE_SERVICE_ROLE_KEY',
-    'GEMINI_API_KEY',
+    'VITE_SUPABASE_URL',
+    'VITE_SUPABASE_ANON_KEY',
   ];
 
-  const missing = required.filter(key => !process.env[key]);
+  const missing = required.filter(key => !import.meta.env[key]);
 
   if (missing.length > 0) {
     throw new Error(
-      `❌ Missing required environment variables:\n${missing.join('\n')}`
+      `❌ Missing required environment variables:\n${missing.join('\n')}\n\nCheck your .env file.`
     );
   }
-
-  console.log('✅ Environment validation passed');
-}
-
-// Call at startup
-if (typeof window === 'undefined') {
-  validateEnvironment();
 }
 ```
 
-**Call in `app/layout.tsx`:**
+**Call in `frontend/src/main.tsx`:**
 
 ```typescript
-import { validateEnvironment } from '@/lib/validate-env';
+import { validateEnvironment } from './lib/validate-env';
 
-export default function RootLayout() {
-  validateEnvironment();
-  
-  return (
-    <html>
-      <body>{/* ... */}</body>
-    </html>
-  );
-}
+validateEnvironment();   // Throws before React mounts if env is missing
+
+ReactDOM.createRoot(document.getElementById('root')!).render(<App />);
+```
+
+**Backend: FastAPI validates its own env on startup in `backend/main.py`:**
+
+```python
+import os, sys
+
+required = ['SUPABASE_URL', 'SUPABASE_KEY', 'GEMINI_API_KEY']
+missing = [k for k in required if not os.getenv(k)]
+if missing:
+    sys.exit(f"❌ Missing required environment variables: {', '.join(missing)}")
 ```
 
 **Checklist:**
 
-- [ ] Environment validation function created
-- [ ] Called in root layout or app initialization
-- [ ] Fails fast if required env vars missing
-- [ ] Tested locally: remove `GEMINI_API_KEY` and verify app fails on startup
-- [ ] Prevents silent failures
+- [ ] Frontend validation checks `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`
+- [ ] Backend validation checks `SUPABASE_URL`, `SUPABASE_KEY`, `GEMINI_API_KEY`
+- [ ] Tested locally: remove a var and verify startup failure
+- [ ] Prevents silent failures where app starts but API calls return 500
 
 **Current Status:**
 - [ ] Verified
@@ -317,10 +294,11 @@ ALTER TABLE table_name ENABLE ROW LEVEL SECURITY;
 **Tables in this project:**
 
 | Table Name | RLS Enabled | Status |
-|-----------|-----------|--------|
-|            | [ ]       | ✅/⚠️  |
-|            | [ ]       | ✅/⚠️  |
-|            | [ ]       | ✅/⚠️  |
+|---|---|---|
+| `labour_laws` | [ ] | ✅/⚠️ |
+| `profiles` | [ ] | ✅/⚠️ |
+| `api_logs` | [ ] | ✅/⚠️ |
+| `waiting_list` | [ ] | ✅/⚠️ |
 
 **Current Status:**
 - [ ] Verified - All tables have RLS
@@ -502,21 +480,19 @@ AND (qual LIKE '%user_metadata%' OR with_check LIKE '%user_metadata%');
 **Search for service role key:**
 
 ```bash
-# Should find NOTHING in client code
-grep -r "SUPABASE_SERVICE_ROLE_KEY" --include="*.tsx" --include="*.ts" app/
+# Should find NOTHING in frontend source
+grep -r "SUPABASE_KEY" --include="*.ts" --include="*.tsx" frontend/
 
-# Should only find it in server-side code
-grep -r "SUPABASE_SERVICE_ROLE_KEY" --include="*.ts" lib/server/
-grep -r "SUPABASE_SERVICE_ROLE_KEY" --include="*.ts" app/api/
+# Should only appear in backend
+grep -r "SUPABASE_KEY" backend/main.py
 ```
 
 **Checklist:**
 
-- [ ] Service role key NOT in any `.tsx` component files
-- [ ] Service role key NOT in any client-side modules
-- [ ] Service role key only in: `lib/server/*`, `app/api/*`, `.env.local`
+- [ ] `SUPABASE_KEY` (service role) NOT in any frontend `.tsx` / `.ts` files
+- [ ] `SUPABASE_KEY` only used in: `backend/main.py` and `.env` / Vercel env vars
 - [ ] Verified with grep search
-- [ ] Server clients always use `createServerClient()`
+- [ ] Frontend uses `VITE_SUPABASE_ANON_KEY` (anon key), never the service role key
 
 **Current Status:**
 - [ ] Verified
@@ -524,77 +500,60 @@ grep -r "SUPABASE_SERVICE_ROLE_KEY" --include="*.ts" app/api/
 
 ---
 
-### ✅ 3.1 Auth Middleware Protects Routes
+### ✅ 3.1 Auth Check on All Protected FastAPI Endpoints
 
-**Priority:** 🟠 HIGH  
-**Impact:** Unprotected routes accessible to anyone  
-**Effort:** 20 minutes
+**Priority:** 🟠 HIGH
+**Impact:** Unprotected API routes accessible to anyone — attacker can burn your Gemini quota
+**Effort:** 15 minutes
 
-**Check middleware exists:**
+This project uses FastAPI (not Next.js middleware). Auth is enforced per-endpoint using a reusable `get_current_user` dependency that validates the Supabase JWT from the `Authorization: Bearer <token>` header.
 
-```bash
-# Verify middleware file exists
-ls -la middleware.ts
+**Verify `backend/main.py` pattern:**
 
-# Check matcher config
-grep -A 5 "export const config" middleware.ts
+```python
+from fastapi import Depends, HTTPException, Header
+from supabase import create_client
+
+def get_current_user(authorization: str = Header(...)):
+    """Validates Supabase JWT. Raises 401 if missing or invalid."""
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing Bearer token")
+
+    token = authorization.split(" ")[1]
+
+    try:
+        user = supabase.auth.get_user(token)
+        return user.user
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+# ✅ Protected endpoint — auth check first
+@app.post("/audit")
+async def audit(file: UploadFile, user=Depends(get_current_user)):
+    # user is guaranteed to be authenticated
+    ...
+
+# ❌ Unprotected — anyone can call this
+@app.post("/audit")
+async def audit(file: UploadFile):
+    ...
 ```
 
-**Create/verify `middleware.ts`:**
+**Check all endpoints that call Gemini or return user data:**
 
-```typescript
-import { createServerClient } from '@supabase/ssr';
-import { NextRequest, NextResponse } from 'next/server';
-
-// Public routes that don't require authentication
-const PUBLIC_ROUTES = ['/login', '/signup', '/forgot-password', '/pricing'];
-
-export async function middleware(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request });
-
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
-          );
-        },
-      },
-    }
-  );
-
-  const { data: { user } } = await supabase.auth.getUser();
-
-  // Default-deny: protect everything except public routes
-  if (!user && !PUBLIC_ROUTES.includes(request.nextUrl.pathname)) {
-    return NextResponse.redirect(new URL('/login', request.url));
-  }
-
-  return supabaseResponse;
-}
-
-// Protect all routes except public ones
-export const config = {
-  matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|login|signup|forgot-password|pricing).*)',
-  ],
-};
+```bash
+grep -n "^@app\." backend/main.py
+# For each route, verify it has: user=Depends(get_current_user)
 ```
 
 **Checklist:**
 
-- [ ] `middleware.ts` exists in project root
-- [ ] Auth check calls `getUser()` (not just `getSession()`)
-- [ ] Uses default-deny pattern (allowlist of public routes)
-- [ ] Matcher config covers all protected paths
-- [ ] Redirects to `/login` for unauthorized users
-- [ ] Tested: Try accessing `/dashboard` without logging in → redirects
+- [ ] `get_current_user` dependency defined in `main.py`
+- [ ] `/audit` endpoint uses `Depends(get_current_user)`
+- [ ] `/logs` endpoint uses `Depends(get_current_user)`
+- [ ] `/admin/*` endpoints check `user.role == 'admin'` after auth
+- [ ] Tested: Call `/audit` without Authorization header → 401 error
+- [ ] Tested: Call with expired token → 401 error
 
 **Current Status:**
 - [ ] Verified
@@ -602,44 +561,37 @@ export const config = {
 
 ---
 
-### ✅ 3.2 Every API Route Has Auth Check
+### ✅ 3.2 All FastAPI Endpoints Audited
 
-**Priority:** 🟠 HIGH  
-**Impact:** Unprotected API endpoints → attackers call Gemini API at your quota  
-**Effort:** 30 minutes
+**Priority:** 🟠 HIGH
+**Impact:** One unprotected endpoint = full Gemini quota abuse
+**Effort:** 10 minutes
 
-**List all API routes:**
+**List all endpoints:**
 
 ```bash
-find app/api -name "route.ts" -type f
+grep -n "^@app\." backend/main.py
 ```
 
-**For each route, verify:**
+**Checklist — AuditAI endpoints:**
 
-```typescript
-// ✅ CORRECT - Auth check comes FIRST
-export async function POST(req: Request) {
-  const supabase = createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  
-  if (!user) {
-    return new Response('Unauthorized', { status: 401 });
-  }
-  
-  // Now safe to process request
-  const body = await req.json();
-  // ...
-}
+| Endpoint | Method | Auth Required | Gemini Call? | Status |
+|---|---|---|---|---|
+| `POST /audit` | POST | ✅ Bearer JWT | ✅ Yes | ✅/⚠️ |
+| `GET /logs` | GET | ✅ Bearer JWT | ❌ No | ✅/⚠️ |
+| `POST /admin/users` | POST | ✅ Admin JWT | ❌ No | ✅/⚠️ |
+| `PUT /admin/users/{id}/password` | PUT | ✅ Admin JWT | ❌ No | ✅/⚠️ |
+
+**All routes should follow this pattern:**
+
+```python
+# ✅ Auth check is FIRST thing in the handler
+@app.post("/audit")
+async def audit(file: UploadFile, user=Depends(get_current_user)):
+    # user is guaranteed valid — safe to proceed
+    profile = supabase.table("profiles").select("*").eq("id", user.id).single().execute()
+    ...
 ```
-
-**Checklist:**
-
-| API Route | Auth Check | Gemini Call? | Status |
-|-----------|-----------|------------|--------|
-| `/api/generate` | [ ] | [ ] | ✅/⚠️ |
-| `/api/save-post` | [ ] | [ ] | ✅/⚠️ |
-| `/api/get-data` | [ ] | [ ] | ✅/⚠️ |
-| `/api/...` | [ ] | [ ] | ✅/⚠️ |
 
 **Current Status:**
 - [ ] All API routes verified
@@ -656,7 +608,7 @@ export async function POST(req: Request) {
 **Search for getSession():**
 
 ```bash
-grep -r "getSession()" --include="*.ts" --include="*.tsx" app/
+grep -r "getSession()" --include="*.ts" --include="*.tsx" frontend/src/
 ```
 
 **The difference:**
@@ -1131,14 +1083,14 @@ These are important but not exploitable on day one:
 **Environment (5 min):**
 
 ```
-[ ] No secrets in .gitignore
-    grep -r "GEMINI_API_KEY" --include="*.ts"
-    
+[ ] No secrets in frontend source
+    grep -r "SUPABASE_KEY\|GEMINI_API_KEY" --include="*.ts" --include="*.tsx" frontend/src/
+
 [ ] Environment validation on startup
-    grep -r "validateEnvironment\|Missing required env" app/
-    
-[ ] .env.local exists and is in .gitignore
-    cat .gitignore | grep .env
+    grep -r "validateEnvironment\|Missing required" frontend/src/ backend/main.py
+
+[ ] .env file in .gitignore
+    cat .gitignore | grep "^\.env"
 ```
 
 **Database (10 min):**
@@ -1146,10 +1098,11 @@ These are important but not exploitable on day one:
 ```
 [ ] All tables have RLS enabled
     SELECT tablename, rowsecurity FROM pg_tables WHERE schemaname='public';
-    
+    -- Expected: labour_laws, profiles, api_logs, waiting_list all = true
+
 [ ] All tables have SELECT/INSERT/UPDATE policies
-    SELECT * FROM pg_policies WHERE tablename='your_table';
-    
+    SELECT tablename, policyname, cmd FROM pg_policies WHERE schemaname='public';
+
 [ ] No auth.jwt()->'user_metadata' in policies
     SELECT * FROM pg_policies WHERE qual LIKE '%user_metadata%';
 ```
@@ -1157,24 +1110,24 @@ These are important but not exploitable on day one:
 **API Routes (10 min):**
 
 ```
-[ ] Auth check on all routes
-    grep -r "getUser()" app/api/
-    
-[ ] Rate limiting on Gemini calls
-    grep -r "geminiLimiter\|ratelimit" app/api/
-    
-[ ] Input validation with Zod
-    grep -r "\.parse\|\.safeParse" app/api/
+[ ] Auth dependency on all endpoints
+    grep -n "Depends(get_current_user)" backend/main.py
+
+[ ] Daily audit limit enforced in /audit
+    grep -n "daily_audit_limit" backend/main.py
+
+[ ] Admin check on admin endpoints
+    grep -n "role.*admin\|admin.*role" backend/main.py
 ```
 
 **Errors (5 min):**
 
 ```
-[ ] No error.stack sent to client
-    grep -r "error.stack\|error.message" --include="*.ts" app/api/
-    
-[ ] No console.log(process.env)
-    grep -r "console.log.*process.env\|console.log.*secret" .
+[ ] No stack traces sent to client
+    grep -r "traceback\|error.stack\|str(e)" backend/main.py
+
+[ ] No console.log with env vars
+    grep -r "console.log.*import.meta.env\|console.log.*VITE_" frontend/src/
 ```
 
 ---
@@ -1184,53 +1137,49 @@ These are important but not exploitable on day one:
 ### Step 1: Environment (5 min)
 
 ```bash
-# 1. Create lib/validate-env.ts (copy from Section 1.6 above)
-# 2. Add to app/layout.tsx: validateEnvironment()
-# 3. Test: Remove GEMINI_API_KEY from .env.local
-#    → App should fail on startup
-# 4. Add back GEMINI_API_KEY
+# 1. Create frontend/src/lib/validate-env.ts (copy from Section 1.6 above)
+# 2. Call validateEnvironment() in frontend/src/main.tsx before React mounts
+# 3. Add startup env check to backend/main.py (top of file, before app creation)
+# 4. Test: Remove GEMINI_API_KEY from .env → backend should exit on startup
 ```
 
 ### Step 2: Supabase Security (15 min)
 
 ```bash
 # 1. Run RLS check in Supabase SQL Editor (Section 2.1)
-# 2. Enable RLS on any tables without it (ALTER TABLE ... ENABLE RLS)
-# 3. Add policies for each table (Section 2.2)
-# 4. Verify WITH CHECK clauses (Section 2.3)
-# 5. Test: Try accessing another user's data as different user
-#    → Should get empty results (RLS blocking)
+#    → Verify labour_laws, profiles, api_logs, waiting_list all have rowsecurity=true
+# 2. Enable RLS on any tables without it: ALTER TABLE table_name ENABLE ROW LEVEL SECURITY;
+# 3. Verify policies for each table (Section 2.2)
+# 4. Verify WITH CHECK clauses on INSERT/UPDATE (Section 2.3)
+# 5. Test: Log in as test user, try fetching another user's api_logs → should be empty
 ```
 
-### Step 3: Auth Middleware (10 min)
+### Step 3: FastAPI Auth Protection (15 min)
 
 ```bash
-# 1. Create middleware.ts in project root (copy from Section 3.1)
-# 2. Configure PUBLIC_ROUTES (login, signup, etc)
-# 3. Test: Visit /dashboard without logging in
-#    → Should redirect to /login
-# 4. Verify matcher config covers all protected routes
+# 1. Verify get_current_user dependency exists in backend/main.py (Section 3.1)
+# 2. Check all @app.post/@app.get endpoints have Depends(get_current_user) (Section 3.2)
+# 3. Check admin endpoints verify role == 'admin' after auth
+# 4. Test: curl POST /audit without Authorization header → should return 401
+# 5. Test: curl GET /logs without auth → should return 401
 ```
 
-### Step 4: API Route Protection (15 min per route)
+### Step 4: Input Validation (15 min)
 
 ```bash
-# For each app/api/*/route.ts:
-# 1. Add getUser() check at top (Section 3.2)
-# 2. Add Zod schema validation (Section 4.1)
-# 3. Use auth user for identity, not request body (Section 4.2)
-# 4. Test with invalid/missing auth → 401 error
-# 5. Test with invalid data → 400 error
+# For each FastAPI endpoint in backend/main.py:
+# 1. Use Pydantic request models for POST body validation (Section 4.1)
+# 2. Confirm user identity comes from JWT (Depends), never from request body (Section 4.2)
+# 3. Test with missing required fields → 422 Unprocessable Entity
 ```
 
 ### Step 5: Rate Limiting (10 min)
 
 ```bash
-# 1. Set up Upstash Redis free tier account
-# 2. Create lib/ratelimit.ts (copy from Section 6.1)
-# 3. Add rate limiter to Gemini API routes
-# 4. Test: Call endpoint 11+ times within 1 hour
-#    → Should get 429 error
+# The app uses daily_audit_limit in the profiles table for per-user rate limiting.
+# This is enforced in the /audit endpoint.
+# Verify: grep -n "daily_audit_limit" backend/main.py shows the limit check before Gemini call.
+# For IP-level rate limiting (DDoS protection), Vercel's built-in protections apply.
 ```
 
 ---
@@ -1248,7 +1197,7 @@ These are important but not exploitable on day one:
 - [ ] No secrets in git history: `git log --all -p | grep -i "api_key\|secret"`
 - [ ] No secrets in source: `grep -r "sk_\|eyJ\|AKIA" --include="*.ts" --include="*.tsx"`
 - [ ] Environment validation passes on startup
-- [ ] Dependenciesvulnerabilities: `npm audit` shows no CRITICAL/HIGH
+- [ ] Dependency vulnerabilities: `npm audit` shows no CRITICAL/HIGH
 
 **Sign-off:**
 

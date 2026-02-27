@@ -14,7 +14,7 @@
 
 | Version | Object | System | Stage | Date | Mission Summary |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **v1.4.0** | **Rigil Kentaurus Prime** | **Alpha Centauri** | **ALPHA** | 2026-03-01 | **Alpha 2.2**: Multi-model routing & Admin "Control Tower". |
+| **v1.4.0** | **Rigil Kentaurus Prime** | **Alpha Centauri** | **ALPHA** | 2026-03-01 *(upcoming)* | **Alpha 2.2**: Multi-model routing & Admin "Control Tower". |
 | **v1.3.1** | **Rigil Kentaurus B** | **Alpha Centauri** | **ALPHA** | 2026-02-28 | **Singularity-2**: 7-day retention policy and UI privacy polish. |
 | **v1.3** | **Rigil Kentaurus** | **Alpha Centauri** | **ALPHA** | 2026-02-28 | **UX & Reporting**: Audit Logs refinements, PDF export, and Role-based UI. |
 | **v1.2** | **Proxima c** | **Alpha Centauri** | **ALPHA** | 2026-02-27 | **Security Hardening**: Audit, Sourcemaps, and Env Validation. |
@@ -32,7 +32,7 @@
 
 ## 🛰 Mission Reports
 
-### [v1.4.0] Rigil Kentaurus Prime (2026-03-01) - ALPHA
+### [v1.4.0] Rigil Kentaurus Prime (2026-03-01) - ALPHA *(Upcoming)*
 - **Multi-Model Routing**: Integrated Anthropic and OpenAI with Gemini fallback logic.
 - **Control Tower Dashboard**: New Admin health section with real-time rate-limit gauges (RPM/TPM).
 - **User Telemetry**: Granular token consumption tracking for each auditor.
