@@ -162,7 +162,8 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                 headers: { 'Authorization': `Bearer ${session.access_token}` },
                 body: formData,
             });
-            const data = await res.json();
+            const ingestCt = res.headers.get('content-type') || '';
+            const data = ingestCt.includes('application/json') ? await res.json() : {};
             if (res.ok) {
                 setIngestResult({ success: true, chunks: data.chunks_ingested, filename: mdFile.name });
                 toast.success(`"${mdFile.name}" ingested — ${data.chunks_ingested} chunks added to knowledge base.`);

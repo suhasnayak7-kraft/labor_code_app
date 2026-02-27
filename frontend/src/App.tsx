@@ -248,16 +248,18 @@ export default function App() {
         body: formData,
       });
 
-      const data = await response.json();
+      // Safe parse — backend may return HTML if Vercel/Railway has an error
+      const ct = response.headers.get('content-type') || '';
+      const data = ct.includes('application/json') ? await response.json() : {};
 
       if (!response.ok) {
         if (response.status === 403) {
-          throw new Error(data.detail || "Access Denied.");
+          throw new Error(data.detail || "Access Denied. You may have reached your daily limit.");
         }
         if (response.status === 400) {
           throw new Error(data.detail || "Invalid file or request.");
         }
-        throw new Error(data.detail || 'Audit failed. Please try again or contact support.');
+        throw new Error(data.detail || 'Audit failed — backend may be temporarily unavailable.');
       }
 
       // Snap to 100% and clear interval
