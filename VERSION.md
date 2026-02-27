@@ -14,5 +14,25 @@
 - Sanitized backend `main.py` exception handling to prevent internal error leakage to clients.
 - Automated GitHub push for security implementation.
 
+## [1.0.0] - 2026-02-26
+### Added
+- **Full Vercel Deployment**: Integrated serverless FastAPI backend with Vite React frontend.
+- **Compliance Scoring**: Implemented `compliance_score` logic to replace old `risk_score` metric.
+- **Reporting**: Added PDF report download functionality for Compliance Auditors (CAs).
+
+### Fixed
+- **Vercel Routing**: Mounted backend under `/api` prefix to resolve 404 routing issues on Vercel.
+- **Runtime Errors**: Removed invalid Python runtime specifications from `vercel.json`.
+
+## [0.9.0] - 2026-02-26
+### Added
+- **Password UX Enhancements**: Added old/new password fields with show/hide functionality to the Edit Profile modal.
+- **Admin UX**: Implemented pre-filling of the "Old Password" field from `admin_password_ref` for easier reference by admins.
+
+## [0.8.0] - 2026-02-26
+### Added
+- **Containerization**: Added `Dockerfile` and `.dockerignore` for Cloud Run deployment support.
+- **Infrastructure**: Initial `vercel.json` configuration for frontend deployment.
+
 ---
 *Next versions will be appended above this line.*
