@@ -104,21 +104,34 @@ export default function App() {
     fetchAuditStatus();
   }, [currentTab]); // Refresh when tab changes
 
+  const MAX_FILE_SIZE = 4.5 * 1024 * 1024; // 4.5MB absolute Vercel Serverless payload limit
+
   const handleFileDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const droppedFile = e.dataTransfer.files[0];
-      if (droppedFile.type === 'application/pdf') {
-        setFile(droppedFile);
-      } else {
+      if (droppedFile.type !== 'application/pdf') {
         alert("Please upload a PDF file.");
+        return;
       }
+      if (droppedFile.size > MAX_FILE_SIZE) {
+        alert("File is too large. Vercel allows a maximum of 4.5MB for free tier serverless endpoints. Please compress your PDF.");
+        return;
+      }
+      setFile(droppedFile);
     }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0]);
+      const selectedFile = e.target.files[0];
+      if (selectedFile.size > MAX_FILE_SIZE) {
+        alert("File is too large. Vercel allows a maximum of 4.5MB for free tier serverless endpoints. Please compress your PDF.");
+        // Clear the input so they can select again
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        return;
+      }
+      setFile(selectedFile);
     }
   };
 
@@ -247,18 +260,28 @@ export default function App() {
         body: formData,
       });
 
-      // Safe parse — backend may return HTML if Vercel/Railway has an error
+      // Safe parse — Vercel Gateway may return HTML or plain text on native crashes (like 4.5MB payload limit)
       const ct = response.headers.get('content-type') || '';
-      const data = ct.includes('application/json') ? await response.json() : {};
+      let data: any = {};
+      if (ct.includes('application/json')) {
+        try {
+          data = await response.json();
+        } catch (err) {
+          data = { detail: "Server returned malformed JSON." };
+        }
+      } else {
+        const text = await response.text();
+        data = { detail: text.substring(0, 100) }; // Capture Vercel's plain text error string
+      }
 
       if (!response.ok) {
         if (response.status === 403) {
           throw new Error(data.detail || "Access Denied. You may have reached your daily limit.");
         }
-        if (response.status === 400) {
-          throw new Error(data.detail || "Invalid file or request.");
+        if (response.status === 400 || response.status === 413) {
+          throw new Error(data.detail || "Invalid file or request (File must be < 4.5MB).");
         }
-        throw new Error(data.detail || 'Audit failed — backend may be temporarily unavailable.');
+        throw new Error(`Audit failed on server: ${data.detail || 'Service unavailable.'}`);
       }
 
       // Snap to 100% and clear interval
@@ -485,7 +508,7 @@ export default function App() {
                           {file ? file.name : "Click or drag your PDF here"}
                         </h3>
                         <p className="text-sm text-zinc-500">
-                          {file ? `${(file.size / 1024 / 1024).toFixed(2)} MB • Ready to audit` : "Only PDF files are supported up to 10MB"}
+                          {file ? `${(file.size / 1024 / 1024).toFixed(2)} MB • Ready to audit` : "Only PDF files are supported up to 4.5MB"}
                         </p>
                       </div>
 
