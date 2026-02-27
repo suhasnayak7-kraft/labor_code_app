@@ -1,6 +1,6 @@
 # 🌌 Project Versioning: The Galactic Trail
 
-> **Current Version:** v1.2 (Proxima c)
+> **Current Version:** v1.3.1 (Rigil Kentaurus B)
 > **Mission Stage:** 🔴 ALPHA BUILD (Internal Testing)
 > **Rule:** Every **Major Version (vX.0)** jumps to a new star system. **Minor Versions (vX.y)** are planets/objects within that system, moving further from the star.
 
@@ -10,6 +10,7 @@
 
 | Version | Object | System | Stage | Date | Mission Summary |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| **v1.3.1** | **Rigil Kentaurus B** | **Alpha Centauri** | **ALPHA** | 2026-02-28 | **Singularity-2**: 7-day retention policy and UI privacy polish. |
 | **v1.3** | **Rigil Kentaurus** | **Alpha Centauri** | **ALPHA** | 2026-02-28 | **UX & Reporting**: Audit Logs refinements, PDF export, and Role-based UI. |
 | **v1.2** | **Proxima c** | **Alpha Centauri** | **ALPHA** | 2026-02-27 | **Security Hardening**: Audit, Sourcemaps, and Env Validation. |
 | **v1.1** | **Proxima b** | **Alpha Centauri** | **ALPHA** | 2026-02-26 | **Cloud Integration**: Vercel deployment and routing fixes. |
@@ -25,6 +26,12 @@
 ---
 
 ## 🛰 Mission Reports
+
+### [v1.3.1] Rigil Kentaurus B (2026-02-28) - ALPHA
+- **The 7-Day Rule**: Implemented automated Postgres function `expire_old_audits` to delete logs older than 7 days.
+- **Privacy Disclosure**: Added UI caption clarifying data retention policy for auditors.
+- **Quota Visibility**: Refactored dashboard to show "Audits Today" count for both Admins and Standard Users.
+- **UX Polish**: Standardized primary button transitions to 200ms.
 
 ### [v1.3] Rigil Kentaurus (2026-02-28) - ALPHA
 - Renamed 'Usage' dashboard to 'Audit Logs' for end-user clarity.

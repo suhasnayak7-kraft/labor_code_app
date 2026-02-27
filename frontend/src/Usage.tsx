@@ -66,41 +66,52 @@ export function UsageDashboard({ token, dailyLimit, role }: { token?: string, da
 
     return (
         <div className="space-y-6">
-            {/* Row 1: Top Metrics (Admin Only) */}
-            {role === 'admin' && (
-                <div className="grid gap-4 md:grid-cols-3">
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Total Tokens Consumed</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-3xl font-bold tracking-tight">{totalTokensUsed.toLocaleString()}</div>
-                            <p className="text-xs text-muted-foreground mt-1">Across all API requests</p>
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Audits Today</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-3xl font-bold tracking-tight">
-                                {logs.filter(l => new Date(l.created_at).toDateString() === new Date().toDateString()).length}
-                                <span className="text-zinc-400 text-xl font-medium"> / {dailyLimit || '-'}</span>
-                            </div>
-                            <p className="text-xs text-muted-foreground mt-1">Daily quota remaining</p>
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Estimated Session Cost</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-3xl font-bold tracking-tight text-emerald-600">${estimatedCost.toFixed(5)}</div>
-                            <p className="text-xs text-muted-foreground mt-1">Based on Gemini Flash pricing</p>
-                        </CardContent>
-                    </Card>
-                </div>
-            )}
+            <div className="flex flex-col gap-1">
+                <p className="text-xs text-zinc-500 flex items-center gap-1.5 px-1">
+                    <span>📝 Reports are automatically deleted after 7 days for your privacy.</span>
+                </p>
+            </div>
+
+            {/* Row 1: Top Metrics */}
+            <div className="grid gap-4 md:grid-cols-3">
+                {/* Public Metric: Audits Today */}
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Audits Today</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-3xl font-bold tracking-tight">
+                            {logs.filter(l => new Date(l.created_at).toDateString() === new Date().toDateString()).length}
+                            <span className="text-zinc-400 text-xl font-medium"> / {dailyLimit || '-'}</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">Daily quota remaining</p>
+                    </CardContent>
+                </Card>
+
+                {/* Admin Only Metrics */}
+                {role === 'admin' && (
+                    <>
+                        <Card>
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <CardTitle className="text-sm font-medium">Total Tokens Consumed</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-3xl font-bold tracking-tight">{totalTokensUsed.toLocaleString()}</div>
+                                <p className="text-xs text-muted-foreground mt-1">Across all API requests</p>
+                            </CardContent>
+                        </Card>
+                        <Card>
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <CardTitle className="text-sm font-medium">Estimated Session Cost</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-3xl font-bold tracking-tight text-emerald-600">${estimatedCost.toFixed(5)}</div>
+                                <p className="text-xs text-muted-foreground mt-1">Based on Gemini Flash pricing</p>
+                            </CardContent>
+                        </Card>
+                    </>
+                )}
+            </div>
 
             {/* Row 2: Area Chart (Admin Only) */}
             {role === 'admin' && (
