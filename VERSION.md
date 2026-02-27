@@ -9,18 +9,22 @@
 
 | Version | Name | Stage | Date | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| **v1.2** | **Centauri** | **CURRENT** | 2026-02-27 | **Security Implementation**: Audit, Gitignore, Sourcemaps, and Env Validation. |
+| **v1.2** | **Centauri** | **CURRENT** | 2026-02-27 | **Security Implementation**: Audit, Sourcemaps, and Env Validation. |
 | **v1.1** | **Barnard's Star** | Alpha | 2026-02-26 | **Full Vercel Deployment**: Serverless FastAPI + Vite React integration. |
 | **v1.0** | **Proxima** | Alpha | 2026-02-26 | **Core Features**: Compliance scoring and PDF reporting. |
-| **v0.7** | **Vesta** | Internal | 2026-02-26 | **Admin Lifecycle**: User approval flows and password generation. |
-| **v0.5** | **Ceres** | Older | 2026-02-26 | **Infrastructure**: API security hardening and Docker support. |
-| **v0.1** | **Mercury** | Early | 2026-02-25 | **Launch**: Initial project scaffolding and context setup. |
+| **v0.7** | **Vesta** | Internal | 2026-02-26 | **Password UX**: Auto-generation, Show/Hide, and Edit Profile enhancements. |
+| **v0.6** | **Pallas** | Internal | 2026-02-26 | **UI Consistency**: Standardized admin headers and state sync fixes. |
+| **v0.5** | **Ceres** | Older | 2026-02-26 | **Infrastructure**: Docker support and initial Cloud Run prep. |
+| **v0.4** | **Mars** | Older | 2026-02-26 | **API Hardening**: Secure API endpoints and Vercel refactor. |
+| **v0.3** | **Earth** | Older | 2026-02-26 | **Governance**: Admin lifecycle management and request status tooling. |
+| **v0.2** | **Venus** | Early | 2026-02-25 | **Project Context**: Established `PROJECT_CONTEXT.md` and rules. |
+| **v0.1** | **Mercury** | Early | 2026-02-25 | **Launch**: Initial project scaffolding and commit. |
 
 ---
 
 ## 🛠 Naming System: "The Distance Rule"
 
-1. **v0.x (Internal):** Use **Planets** (Mercury, Mars) or **Asteroids** (Ceres, Vesta, Pallas).
+1. **v0.x (Internal):** Use **Planets** (Mercury, Venus, Earth, Mars) or **Asteroids** (Ceres, Pallas, Vesta).
 2. **v1.x (Alpha):** Use the **Nearest Stars** (Proxima, Barnard's Star, Wolf 359).
 3. **v2.0 (Major):** Use **Famous Bright Stars** (Sirius, Canopus, Rigel).
 
@@ -29,18 +33,24 @@
 ## 🛰 Development Details
 
 ### [v1.2] Centauri (2026-02-27)
-- **Security**: Implemented `SECURITY_CHECKLIST.md`.
-- **Validation**: Added `validate-env.ts` for frontend runtime checks.
-- **Privacy**: Disabled production sourcemaps in `vite.config.ts`.
-- **Sanitization**: Obfuscated raw server exceptions in `backend/main.py`.
+- **Security Audit**: Implemented `SECURITY_CHECKLIST.md`.
+- **Sourcemaps**: Disabled production sourcemaps for security.
+- **Validation**: Added runtime `validate-env.ts` for Vite.
 
 ### [v1.1] Barnard's Star (2026-02-26)
-- **Deployment**: Migrated to Vercel Serverless architecture.
-- **Routing**: Fixed 404s by mounting backend under `/api`.
+- **Cloud Migration**: Successfully deployed serverless FastAPI to Vercel.
+- **Routing Integration**: Fixed frontend-backend routing via `/api` proxy.
 
 ### [v1.0] Proxima (2026-02-26)
-- **Engine**: Replaced `risk_score` with `compliance_score`.
-- **Features**: Added PDF export for Compliance Auditors.
+- **Compliance**: Replaced `risk_score` with Indian Labour Code `compliance_score`.
+- **Reporting**: Enabled PDF downloads for audit findings.
+
+### [v0.7] Vesta (2026-02-26)
+- **Password Security**: Implemented auto-password generation for new users.
+- **Modals**: Added show/hide toggles and pre-filling for admin password references.
+
+### [v0.3] Earth (2026-02-26)
+- **Admin Tools**: Built user lifecycle management (Approve/Reject) and role governance.
 
 ---
-*Next destination: Beyond Alpha Centauri...*
+*Next destination: Wolf 359...*
