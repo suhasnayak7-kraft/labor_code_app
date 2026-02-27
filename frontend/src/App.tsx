@@ -38,7 +38,6 @@ export default function App() {
   const [result, setResult] = useState<{ compliance_score: number; findings: string[] } | null>(null);
   const [totalTokens, setTotalTokens] = useState<number>(0);
   const [scanProgress, setScanProgress] = useState(0);
-  const [selectedModel, setSelectedModel] = useState<string>('gemini-2.5-flash');
   const [auditStatus, setAuditStatus] = useState<{ usage_today: number; daily_limit: number; remaining: number; is_admin: boolean } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -237,7 +236,7 @@ export default function App() {
 
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('model_id', selectedModel);
+    formData.append('model_id', 'gemini-1.5-flash');
 
     try {
       const response = await fetch(`${API_URL}/audit`, {
@@ -490,19 +489,6 @@ export default function App() {
                         </p>
                       </div>
 
-                      {/* Model selector */}
-                      <div className="mt-6 w-full max-w-sm">
-                        <label className="block text-xs font-medium text-[#8F837A] mb-1.5 tracking-wide uppercase">AI Model</label>
-                        <select
-                          value={selectedModel}
-                          onChange={(e) => setSelectedModel(e.target.value)}
-                          className="w-full rounded-md border border-[#E6E4E0] bg-[#FFFFFC] text-[#2C2A28] text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#606C5A] focus:border-[#606C5A] transition-colors"
-                        >
-                          <option value="gemini-2.5-flash">Gemini 2.5 Flash (Default · Fast)</option>
-                          <option value="claude-3-5-sonnet">Claude 3.5 Sonnet (Deep Analysis)</option>
-                          <option value="gpt-4o">GPT-4o (Cross-check)</option>
-                        </select>
-                      </div>
 
                       <Button
                         size="lg"
