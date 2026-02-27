@@ -81,6 +81,18 @@ interface ToolConfig {
     sort_order: number;
 }
 
+interface PlanConfig {
+    id: string;
+    display_name: string;
+    price_monthly: number;
+    price_annual: number;
+    max_seats: number;
+    description: string;
+    is_active: boolean;
+    features: string[];
+    sort_order: number;
+}
+
 export function AdminDashboard({ session, adminProfile }: { session: any, adminProfile: any }) {
     const [profiles, setProfiles] = useState<Profile[]>([]);
     const [waitingList, setWaitingList] = useState<WaitingListEntry[]>([]);
@@ -94,6 +106,9 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
     ]);
     const [toolConfigs, setToolConfigs] = useState<ToolConfig[]>([]);
     const [isSavingTool, setIsSavingTool] = useState<string | null>(null);
+    const [planConfigs, setPlanConfigs] = useState<PlanConfig[]>([]);
+    const [isSavingPlan, setIsSavingPlan] = useState<string | null>(null);
+    const [editingPlan, setEditingPlan] = useState<string | null>(null);
     const [isRefreshing, setIsRefreshing] = useState(false);
 
     // Tool icon map
@@ -203,6 +218,14 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
 
         if (toolData) setToolConfigs(toolData as ToolConfig[]);
 
+        // Fetch Plan Configs
+        const { data: planData } = await supabase
+            .from('plan_config')
+            .select('*')
+            .order('sort_order', { ascending: true });
+
+        if (planData) setPlanConfigs(planData as PlanConfig[]);
+
         setLoading(false);
     };
 
@@ -218,8 +241,25 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
             toast.success('Tool configuration updated.');
         } else {
             toast.error('Failed to update tool config.');
+
         }
         setIsSavingTool(null);
+    };
+
+    const updatePlanConfig = async (planId: string, field: string, value: string | number | boolean) => {
+        setIsSavingPlan(planId);
+        const { error } = await supabase
+            .from('plan_config')
+            .update({ [field]: value })
+            .eq('id', planId);
+
+        if (!error) {
+            setPlanConfigs(prev => prev.map(p => p.id === planId ? { ...p, [field]: value } : p));
+            toast.success('Plan updated.');
+        } else {
+            toast.error('Failed to update plan.');
+        }
+        setIsSavingPlan(null);
     };
 
     const fetchStats = async () => {
@@ -699,56 +739,112 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                             <p className="text-[13px] text-[#8F837A] mt-1">Configure which tools are available per plan tier. Changes save instantly to the database.</p>
                         </div>
 
-                        {/* Plan Tier Cards */}
+                        {/* Plan Tier Cards — dynamic from plan_config table */}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            {[
-                                {
-                                    name: 'Free',
-                                    price: '₹0 / month',
-                                    description: 'Self-serve access to get started',
-                                    features: ['3 Labour Code audits / month', '1 Doc Vault download', 'Basic compliance score'],
-                                    badge: 'bg-[#F3F3F2] text-[#5E5E5E] border-[#E6E4E0]',
-                                    accent: 'border-t-[#C0B4A8]',
-                                },
-                                {
-                                    name: 'Paid',
-                                    price: '₹999 / month',
-                                    description: 'For compliance professionals & CAs',
-                                    features: ['Unlimited audits', 'All live tools', 'Priority AI queue', 'Export PDF reports'],
-                                    badge: 'bg-[#ECF0E8] text-[#606C5A] border-[#DCE4D5]',
-                                    accent: 'border-t-[#606C5A]',
-                                },
-                                {
-                                    name: 'Team',
-                                    price: '₹2,499 / month',
-                                    description: 'For firms with multiple compliance users',
-                                    features: ['Up to 5 seats', 'All tools + priority support', 'Shared audit history', 'Team billing'],
-                                    badge: 'bg-[#EBF3FA] text-[#4E7A94] border-[#C3DBE9]',
-                                    accent: 'border-t-[#4E7A94]',
-                                }
-                            ].map(plan => (
-                                <Card key={plan.name} className={`bg-[#FFFFFC] border-[#E6E4E0] border-t-4 ${plan.accent} shadow-[0_1px_3px_rgba(95,87,80,0.07)]`}>
-                                    <CardHeader className="pb-3">
-                                        <div className="flex items-center justify-between">
-                                            <CardTitle className="text-[15px] font-semibold text-[#2C2A28]">{plan.name}</CardTitle>
-                                            <Badge className={`text-[10px] uppercase font-bold tracking-widest border ${plan.badge}`}>{plan.name}</Badge>
-                                        </div>
-                                        <div className="text-xl font-bold font-serif text-[#2C2A28] mt-1">{plan.price}</div>
-                                        <CardDescription className="text-[12px] text-[#8F837A]">{plan.description}</CardDescription>
-                                    </CardHeader>
-                                    <CardContent>
-                                        <ul className="space-y-1.5">
-                                            {plan.features.map(f => (
-                                                <li key={f} className="flex items-center gap-2 text-[12px] text-[#5E5E5E]">
-                                                    <div className="w-1 h-1 rounded-full bg-[#C0B4A8] flex-shrink-0" />
-                                                    {f}
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </CardContent>
-                                </Card>
-                            ))}
+                            {(planConfigs.length > 0 ? planConfigs : [
+                                { id: 'free', display_name: 'Free', price_monthly: 0, price_annual: 0, max_seats: 1, description: 'Self-serve access to get started', features: [], sort_order: 1, is_active: true },
+                                { id: 'paid', display_name: 'Paid', price_monthly: 999, price_annual: 799, max_seats: 1, description: 'For compliance professionals & CAs', features: [], sort_order: 2, is_active: true },
+                                { id: 'team', display_name: 'Team', price_monthly: 2499, price_annual: 1999, max_seats: 5, description: 'For firms with multiple compliance users', features: [], sort_order: 3, is_active: true },
+                            ] as PlanConfig[]).map(plan => {
+                                const accentMap: Record<string, string> = { free: 'border-t-[#C0B4A8]', paid: 'border-t-[#606C5A]', team: 'border-t-[#4E7A94]' };
+                                const badgeMap: Record<string, string> = { free: 'bg-[#F3F3F2] text-[#5E5E5E] border-[#E6E4E0]', paid: 'bg-[#ECF0E8] text-[#606C5A] border-[#DCE4D5]', team: 'bg-[#EBF3FA] text-[#4E7A94] border-[#C3DBE9]' };
+                                const isSaving = isSavingPlan === plan.id;
+                                const isEditing = editingPlan === plan.id;
+                                return (
+                                    <Card key={plan.id} className={`bg-[#FFFFFC] border-[#E6E4E0] border-t-4 ${accentMap[plan.id] || 'border-t-[#C0B4A8]'} shadow-[0_1px_3px_rgba(95,87,80,0.07)]`}>
+                                        <CardHeader className="pb-3">
+                                            <div className="flex items-center justify-between">
+                                                <CardTitle className="text-[15px] font-semibold text-[#2C2A28]">{plan.display_name}</CardTitle>
+                                                <div className="flex items-center gap-2">
+                                                    <Badge className={`text-[10px] uppercase font-bold tracking-widest border ${badgeMap[plan.id] || badgeMap.free}`}>{plan.display_name}</Badge>
+                                                    <button
+                                                        onClick={() => setEditingPlan(isEditing ? null : plan.id)}
+                                                        className="text-[10px] text-[#8F837A] hover:text-[#2C2A28] transition-colors underline underline-offset-2"
+                                                    >
+                                                        {isEditing ? 'Done' : 'Edit'}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            {/* Monthly price — editable */}
+                                            {isEditing ? (
+                                                <div className="mt-2 space-y-2">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-[11px] text-[#8F837A] w-24 shrink-0">Monthly (₹)</span>
+                                                        <Input
+                                                            type="number" min={0}
+                                                            defaultValue={plan.price_monthly}
+                                                            className="h-7 text-[12px] border-[#E6E4E0]"
+                                                            onBlur={e => { const v = parseInt(e.target.value, 10); if (!isNaN(v) && v !== plan.price_monthly) updatePlanConfig(plan.id, 'price_monthly', v); }}
+                                                        />
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-[11px] text-[#8F837A] w-24 shrink-0">Annual (₹)</span>
+                                                        <Input
+                                                            type="number" min={0}
+                                                            defaultValue={plan.price_annual}
+                                                            className="h-7 text-[12px] border-[#E6E4E0]"
+                                                            onBlur={e => { const v = parseInt(e.target.value, 10); if (!isNaN(v) && v !== plan.price_annual) updatePlanConfig(plan.id, 'price_annual', v); }}
+                                                        />
+                                                    </div>
+                                                    {plan.id === 'team' && (
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-[11px] text-[#8F837A] w-24 shrink-0">Max Seats</span>
+                                                            <Input
+                                                                type="number" min={1}
+                                                                defaultValue={plan.max_seats}
+                                                                className="h-7 text-[12px] border-[#E6E4E0]"
+                                                                onBlur={e => { const v = parseInt(e.target.value, 10); if (!isNaN(v) && v !== plan.max_seats) updatePlanConfig(plan.id, 'max_seats', v); }}
+                                                            />
+                                                        </div>
+                                                    )}
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-[11px] text-[#8F837A] w-24 shrink-0">Tagline</span>
+                                                        <Input
+                                                            type="text"
+                                                            defaultValue={plan.description}
+                                                            className="h-7 text-[12px] border-[#E6E4E0]"
+                                                            onBlur={e => { if (e.target.value !== plan.description) updatePlanConfig(plan.id, 'description', e.target.value); }}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <div className="text-xl font-bold font-serif text-[#2C2A28] mt-1">
+                                                        {plan.price_monthly === 0 ? '₹0' : `₹${plan.price_monthly.toLocaleString('en-IN')}`}
+                                                        <span className="text-[13px] font-normal text-[#8F837A]"> / month</span>
+                                                    </div>
+                                                    {plan.price_annual > 0 && (
+                                                        <div className="text-[11px] text-[#8F837A]">₹{plan.price_annual.toLocaleString('en-IN')} billed annually</div>
+                                                    )}
+                                                    <CardDescription className="text-[12px] text-[#8F837A] mt-0.5">{plan.description}</CardDescription>
+                                                </>
+                                            )}
+                                        </CardHeader>
+                                        <CardContent>
+                                            {isSaving && <div className="text-[11px] text-[#8F837A] italic mb-2 flex items-center gap-1"><Loader2 size={10} className="animate-spin" /> Saving...</div>}
+                                            {plan.features && plan.features.length > 0 ? (
+                                                <ul className="space-y-1.5">
+                                                    {plan.features.map((f: string) => (
+                                                        <li key={f} className="flex items-center gap-2 text-[12px] text-[#5E5E5E]">
+                                                            <div className="w-1 h-1 rounded-full bg-[#C0B4A8] flex-shrink-0" />
+                                                            {f}
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            ) : (
+                                                <p className="text-[11px] text-[#C0B4A8] italic">No features listed yet.</p>
+                                            )}
+                                            {plan.id === 'team' && !isEditing && (
+                                                <div className="mt-3 text-[11px] text-[#8F837A] border-t border-[#E6E4E0] pt-2">
+                                                    Max seats: <span className="font-medium text-[#2C2A28]">{plan.max_seats}</span>
+                                                </div>
+                                            )}
+                                        </CardContent>
+                                    </Card>
+                                );
+                            })}
                         </div>
+
 
                         {/* Tool Registry Table */}
                         <Card className="bg-[#FFFFFC] border-[#E6E4E0] shadow-[0_1px_3px_rgba(95,87,80,0.07)]">
