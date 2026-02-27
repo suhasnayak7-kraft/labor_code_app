@@ -425,7 +425,9 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                 })
             });
 
-            const data = await res.json();
+            // Safe JSON parse — server might return HTML on a 500
+            const contentType = res.headers.get('content-type') || '';
+            const data = contentType.includes('application/json') ? await res.json() : {};
 
             // Helper to mark the waitlist entry as approved and close the dialog
             const approveAndClose = async () => {
@@ -517,7 +519,8 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                         await supabase.from('profiles').update({ admin_password_ref: resetPassword }).eq('id', editingProfile.id);
                         setProfiles(prev => prev.map(p => p.id === editingProfile.id ? { ...p, admin_password_ref: resetPassword } : p));
                     } else {
-                        const data = await res.json();
+                        const ct = res.headers.get('content-type') || '';
+                        const data = ct.includes('application/json') ? await res.json() : {};
                         toast.error(data.detail || "Failed to reset password.");
                     }
                 } catch (e) {
