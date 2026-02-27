@@ -9,7 +9,7 @@ import { Badge } from './components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "./components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "./components/ui/alert-dialog";
-import { Shield, Lock, Unlock, Mail, Loader2, UserX, UserCheck, Activity, KeyRound, Save, Eye, EyeOff, Zap, Clock, Globe, Users, Server } from 'lucide-react';
+import { Shield, Lock, Unlock, Mail, Loader2, UserX, UserCheck, Activity, KeyRound, Save, Eye, EyeOff, Zap, Clock, Globe, Users, AlertCircle, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip as RechartsTooltip } from 'recharts';
 
@@ -77,7 +77,6 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
         { model_id: 'gpt-4o', provider: 'openai', rpm: 0, tpm: 0, rpmLimit: 3, tpmLimit: 30000, isActive: false }
     ]);
     const [isRefreshing, setIsRefreshing] = useState(false);
-    const [viewMode, setViewMode] = useState<'observability' | 'users'>('observability');
 
     // Modal States
     const [selectedWaitlistEntry, setSelectedWaitlistEntry] = useState<WaitingListEntry | null>(null);
@@ -507,64 +506,140 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
     }
 
     return (
-        <div className="space-y-6 animate-in fade-in duration-500 max-w-6xl mx-auto pb-12">
-
-            {/* Persistent Admin Header */}
-            <div className="bg-white rounded-xl p-6 text-zinc-900 shadow-sm flex items-center justify-between border border-zinc-200">
-                <div className="flex flex-row items-center gap-5">
-                    <div className="bg-zinc-50 p-2.5 rounded-xl border border-zinc-100 shadow-sm">
-                        <Shield className="text-emerald-600 w-6 h-6" />
+        <div className="space-y-6 fade-in max-w-6xl mx-auto pb-12">
+            <Tabs defaultValue="pulse" className="w-full space-y-6">
+                {/* Persistent Admin Header */}
+                <div className="bg-white rounded-xl p-6 shadow-[0_1px_3px_rgba(95,87,80,0.07)] flex items-center justify-between border border-[#E6E4E0]">
+                    <div className="flex flex-row items-center gap-5">
+                        <div className="bg-[#ECF0E8] p-2.5 rounded-xl border border-[#DCE4D5] shadow-sm">
+                            <Shield className="text-[#606C5A] w-6 h-6" />
+                        </div>
+                        <div>
+                            <h1 className="font-serif text-2xl text-[#2C2A28]">Founder's Console</h1>
+                            <p className="text-[#8F837A] flex items-center gap-2 text-[13px] mt-1">
+                                Logged in as <span className="text-[#2C2A28] font-medium">{adminProfile?.full_name || session?.user?.email}</span>
+                                <Badge variant="secondary" className="bg-[#F3F3F2] text-[#5E5E5E] border-[#E6E4E0] text-[10px] uppercase tracking-wider h-4">Administrator</Badge>
+                            </p>
+                        </div>
                     </div>
-                    <div>
-                        <h1 className="text-2xl font-bold tracking-tight text-zinc-900 transition-colors">Governance Console</h1>
-                        <p className="text-zinc-500 flex items-center gap-2 text-sm mt-1">
-                            Logged in as <span className="text-zinc-700 font-medium">{adminProfile?.full_name || session?.user?.email}</span>
-                            <Badge variant="secondary" className="bg-zinc-100 text-zinc-500 border-zinc-200 text-[10px] uppercase tracking-wider h-4">Administrator</Badge>
-                        </p>
+                    <div className="flex items-center gap-4">
+                        <TabsList className="bg-[#F3F3F2] border border-[#E6E4E0] p-1 h-auto rounded-lg mr-2">
+                            <TabsTrigger value="pulse" className="text-[13px] font-medium data-[state=active]:bg-white data-[state=active]:text-[#2C2A28] data-[state=active]:shadow-[0_1px_2px_rgba(95,87,80,0.06)] text-[#8F837A] rounded-md px-4 py-1.5 transition-all">Pulse</TabsTrigger>
+                            <TabsTrigger value="governance" className="text-[13px] font-medium data-[state=active]:bg-white data-[state=active]:text-[#2C2A28] data-[state=active]:shadow-[0_1px_2px_rgba(95,87,80,0.06)] text-[#8F837A] rounded-md px-4 py-1.5 transition-all">Governance</TabsTrigger>
+                            <TabsTrigger value="system" className="text-[13px] font-medium data-[state=active]:bg-white data-[state=active]:text-[#2C2A28] data-[state=active]:shadow-[0_1px_2px_rgba(95,87,80,0.06)] text-[#8F837A] rounded-md px-4 py-1.5 transition-all">System</TabsTrigger>
+                        </TabsList>
+
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className={`bg-white border-[#E6E4E0] text-[#5E5E5E] hover:bg-[#F3F3F2] hover:text-[#2C2A28] gap-2 h-9 px-4 transition-all ${isRefreshing ? 'opacity-50' : ''}`}
+                            onClick={fetchData}
+                            disabled={loading || isRefreshing}
+                        >
+                            {loading || isRefreshing ? <Loader2 size={16} className="animate-spin text-[#606C5A]" /> : <Activity size={16} className="text-[#606C5A]" />}
+                            {loading || isRefreshing ? 'Updating Metrics...' : 'Refresh Pulse'}
+                        </Button>
                     </div>
                 </div>
-                <div className="flex items-center gap-4">
-                    {/* Pillar Toggle Segmented Control */}
-                    <div className="flex bg-zinc-100 p-1 rounded-xl border border-zinc-200 shadow-inner mr-2">
-                        <button
-                            onClick={() => setViewMode('observability')}
-                            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === 'observability'
-                                ? 'bg-white text-emerald-600 shadow-sm border border-zinc-200'
-                                : 'text-zinc-500 hover:text-zinc-700'
-                                }`}
-                        >
-                            <Server size={14} /> Observability
-                        </button>
-                        <button
-                            onClick={() => setViewMode('users')}
-                            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === 'users'
-                                ? 'bg-white text-blue-600 shadow-sm border border-zinc-200'
-                                : 'text-zinc-500 hover:text-zinc-700'
-                                }`}
-                        >
-                            <Users size={14} /> Governance
-                        </button>
-                    </div>
 
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        className={`bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50 gap-2 h-9 px-4 transition-all ${isRefreshing ? 'opacity-50' : ''}`}
-                        onClick={fetchData}
-                        disabled={loading || isRefreshing}
-                    >
-                        {loading || isRefreshing ? <Loader2 size={16} className="animate-spin text-emerald-500" /> : <Activity size={16} className="text-emerald-500" />}
-                        {loading || isRefreshing ? 'Updating Metrics...' : 'Refresh Observations'}
-                    </Button>
-                </div>
-            </div>
+                <div className="relative fade-in">
+                    <TabsContent value="pulse" className="space-y-6 outline-none">
+                        <div className="mb-4">
+                            <h2 className="font-serif text-xl tracking-tight text-[#2C2A28]">Pulse</h2>
+                            <p className="text-[13px] text-[#8F837A] mt-1">Real-time metrics and recent audit activity.</p>
+                        </div>
 
-            <div className="relative">
-                {viewMode === 'observability' ? (
-                    <div
-                        key="observability"
-                        className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-300"
-                    >
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <Card className="bg-[#FFFFFC] border-[#E6E4E0] shadow-[0_1px_2px_rgba(95,87,80,0.04)]">
+                                <CardHeader className="pb-2">
+                                    <div className="flex items-center justify-between">
+                                        <CardTitle className="text-[13px] font-medium text-[#5E5E5E]">Active Users Today</CardTitle>
+                                        <Users className="w-4 h-4 text-[#8F837A]" />
+                                    </div>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-2xl font-bold text-[#2C2A28] font-serif">
+                                        {profiles.filter(p => !p.is_deleted && p.audits_used_today && p.audits_used_today > 0).length}
+                                    </div>
+                                </CardContent>
+                            </Card>
+
+                            <Card className="bg-[#FFFFFC] border-[#E6E4E0] shadow-[0_1px_2px_rgba(95,87,80,0.04)]">
+                                <CardHeader className="pb-2">
+                                    <div className="flex items-center justify-between">
+                                        <CardTitle className="text-[13px] font-medium text-[#5E5E5E]">Audits Run Today</CardTitle>
+                                        <FileText className="w-4 h-4 text-[#8F837A]" />
+                                    </div>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-2xl font-bold text-[#2C2A28] font-serif">
+                                        {auditLogs.filter(l => new Date(l.created_at) >= new Date(new Date().setHours(0, 0, 0, 0))).length}
+                                    </div>
+                                </CardContent>
+                            </Card>
+
+                            <Card className="bg-[#FFFFFC] border-[#E6E4E0] shadow-[0_1px_2px_rgba(95,87,80,0.04)]">
+                                <CardHeader className="pb-2">
+                                    <div className="flex items-center justify-between">
+                                        <CardTitle className="text-[13px] font-medium text-[#5E5E5E]">Pending Requests</CardTitle>
+                                        <Clock className="w-4 h-4 text-[#8F837A]" />
+                                    </div>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-2xl font-bold text-[#2C2A28] font-serif">
+                                        {waitingList.filter(w => w.status === 'pending').length}
+                                    </div>
+                                </CardContent>
+                            </Card>
+
+                            <Card className="bg-[#FFFFFC] border-[#E6E4E0] shadow-[0_1px_2px_rgba(95,87,80,0.04)]">
+                                <CardHeader className="pb-2">
+                                    <div className="flex items-center justify-between">
+                                        <CardTitle className="text-[13px] font-medium text-[#5E5E5E]">Errors (24h)</CardTitle>
+                                        <AlertCircle className="w-4 h-4 text-[#8F837A]" />
+                                    </div>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-2xl font-bold text-[#8F837A] font-serif">
+                                        0
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+                            <Card className="bg-[#FFFFFC] border-[#E6E4E0] shadow-[0_1px_3px_rgba(95,87,80,0.07)]">
+                                <CardHeader>
+                                    <CardTitle className="text-[15px] font-medium text-[#2C2A28]">Recent Audit Activity</CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="space-y-4">
+                                        {auditLogs.slice(0, 5).map(log => {
+                                            const user = profiles.find(p => p.id === log.user_id);
+                                            return (
+                                                <div key={log.id} className="flex items-start justify-between border-b border-[#E6E4E0] pb-3 last:border-0 last:pb-0 hover:bg-[#F3F3F2]/50 p-2 -mx-2 rounded transition-colors">
+                                                    <div>
+                                                        <div className="text-[13px] font-medium text-[#2C2A28]">{user?.company_name || user?.email || 'Unknown User'}</div>
+                                                        <div className="text-[11px] text-[#8F837A] mt-0.5">{log.filename || 'Document Audit'}</div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <div className="text-[11px] font-mono text-[#5E5E5E]">{(log.total_tokens || 0).toLocaleString()} tokens</div>
+                                                        <div className="text-[10px] text-[#C0B4A8] mt-1">{new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                                                    </div>
+                                                </div>
+                                            )
+                                        })}
+                                        {auditLogs.length === 0 && <div className="text-[13px] text-[#8F837A] italic">No recent activity.</div>}
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </div>
+                    </TabsContent>
+                    <TabsContent value="system" className="space-y-6 outline-none">
+                        <div className="mb-4">
+                            <h2 className="font-serif text-xl tracking-tight text-[#2C2A28]">System Health & Cost</h2>
+                            <p className="text-[13px] text-[#8F837A] mt-1">Monitor AI model performance, rate limits, and estimated costs.</p>
+                        </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                             {healthData.map((model) => {
                                 const rpmProgress = (model.rpm / (model.rpmLimit || 1)) * 100;
@@ -578,47 +653,47 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                                         className="transition-transform duration-300 ease-in-out"
                                         style={isRefreshing ? { transform: 'scale(1.01)' } : {}}
                                     >
-                                        <Card className="bg-white border-zinc-200 shadow-sm overflow-hidden group hover:border-emerald-500/30 transition-all duration-300">
-                                            <div className={`h-1.5 w-full ${isExhausted ? 'bg-red-500' : isCritical ? 'bg-amber-500' : 'bg-emerald-500/20'}`} />
+                                        <Card className="bg-[#FFFFFC] border-[#E6E4E0] shadow-[0_1px_3px_rgba(95,87,80,0.07)] overflow-hidden group hover:border-[#C0B4A8] transition-all duration-300">
+                                            <div className={`h-1.5 w-full ${isExhausted ? 'bg-[#D32F2F]' : isCritical ? 'bg-[#F2A65A]' : 'bg-[#606C5A]/40'}`} />
                                             <CardHeader className="pb-2 space-y-1">
                                                 <div className="flex items-center justify-between">
-                                                    <CardTitle className="text-lg flex items-center gap-2 text-zinc-900">
-                                                        {model.provider === 'anthropic' ? <Zap size={18} className="text-amber-500" /> :
-                                                            model.provider === 'openai' ? <Globe size={18} className="text-emerald-600" /> :
-                                                                <Activity size={18} className="text-blue-500" />}
-                                                        <span className="font-mono tracking-tight">{model.model_id}</span>
+                                                    <CardTitle className="text-lg flex items-center gap-2 text-[#2C2A28]">
+                                                        {model.provider === 'anthropic' ? <Zap size={18} className="text-[#F2A65A]" /> :
+                                                            model.provider === 'openai' ? <Globe size={18} className="text-[#606C5A]" /> :
+                                                                <Activity size={18} className="text-[#4E7A94]" />}
+                                                        <span className="font-mono tracking-tight text-[#2C2A28]">{model.model_id}</span>
                                                     </CardTitle>
                                                     <Badge
                                                         variant="outline"
-                                                        className={`text-[10px] uppercase font-bold tracking-widest ${model.isActive ? "bg-emerald-50 text-emerald-600 border-emerald-200" : "bg-red-50 text-red-600 border-red-200"}`}
+                                                        className={`text-[10px] uppercase font-bold tracking-widest ${model.isActive ? "bg-[#ECF0E8] text-[#606C5A] border-[#DCE4D5]" : "bg-[#FDECEA] text-[#D32F2F] border-[#F8C1BE]"}`}
                                                     >
                                                         {model.isActive ? 'Active' : 'Inactive'}
                                                     </Badge>
                                                 </div>
-                                                <CardDescription className="font-mono text-[9px] uppercase tracking-[0.2em] text-zinc-400 font-bold">{model.provider} ON-DEMAND NODE</CardDescription>
+                                                <CardDescription className="font-mono text-[9px] uppercase tracking-[0.2em] text-[#8F837A] font-bold">{model.provider} ON-DEMAND NODE</CardDescription>
                                             </CardHeader>
                                             <CardContent className="space-y-5">
                                                 <div className="space-y-2">
-                                                    <div className="flex justify-between text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
-                                                        <span className="flex items-center gap-1.5"><Activity size={12} className="text-zinc-400" /> Requests (RPM)</span>
-                                                        <span className={isExhausted ? 'text-red-600' : isCritical ? 'text-amber-600' : 'text-zinc-600'}>{model.rpm} / {model.rpmLimit}</span>
+                                                    <div className="flex justify-between text-[10px] font-bold text-[#5E5E5E] uppercase tracking-wider">
+                                                        <span className="flex items-center gap-1.5"><Activity size={12} className="text-[#C0B4A8]" /> Requests (RPM)</span>
+                                                        <span className={isExhausted ? 'text-[#D32F2F]' : isCritical ? 'text-[#F2A65A]' : 'text-[#5E5E5E]'}>{model.rpm} / {model.rpmLimit}</span>
                                                     </div>
-                                                    <div className="h-1 bg-zinc-100 rounded-full overflow-hidden">
-                                                        <div className={`h-full transition-all ${isExhausted ? 'bg-red-500' : isCritical ? 'bg-amber-500' : 'bg-emerald-500/60'}`} style={{ width: `${rpmProgress}%` }} />
+                                                    <div className="h-1 bg-[#F3F3F2] rounded-full overflow-hidden">
+                                                        <div className={`h-full transition-all ${isExhausted ? 'bg-[#D32F2F]' : isCritical ? 'bg-[#F2A65A]' : 'bg-[#606C5A]/60'}`} style={{ width: `${rpmProgress}%` }} />
                                                     </div>
                                                 </div>
                                                 <div className="space-y-2">
-                                                    <div className="flex justify-between text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
-                                                        <span className="flex items-center gap-1.5"><Zap size={12} className="text-zinc-400" /> Tokens (TPM)</span>
-                                                        <span className={isExhausted ? 'text-red-600' : isCritical ? 'text-amber-600' : 'text-zinc-600'}>{model.tpm.toLocaleString()} / {model.tpmLimit.toLocaleString()}</span>
+                                                    <div className="flex justify-between text-[10px] font-bold text-[#5E5E5E] uppercase tracking-wider">
+                                                        <span className="flex items-center gap-1.5"><Zap size={12} className="text-[#C0B4A8]" /> Tokens (TPM)</span>
+                                                        <span className={isExhausted ? 'text-[#D32F2F]' : isCritical ? 'text-[#F2A65A]' : 'text-[#8F837A]'}>{model.tpm.toLocaleString()} / {model.tpmLimit.toLocaleString()}</span>
                                                     </div>
-                                                    <div className="h-1 bg-zinc-100 rounded-full overflow-hidden">
-                                                        <div className={`h-full transition-all ${isExhausted ? 'bg-red-500' : isCritical ? 'bg-amber-500' : 'bg-emerald-500/60'}`} style={{ width: `${tpmProgress}%` }} />
+                                                    <div className="h-1 bg-[#F3F3F2] rounded-full overflow-hidden">
+                                                        <div className={`h-full transition-all ${isExhausted ? 'bg-[#D32F2F]' : isCritical ? 'bg-[#F2A65A]' : 'bg-[#606C5A]/60'}`} style={{ width: `${tpmProgress}%` }} />
                                                     </div>
                                                 </div>
 
-                                                <div className="pt-4 flex items-center justify-between text-[9px] text-zinc-400 font-bold bg-zinc-50 -mx-6 -mb-6 px-6 py-3 border-t border-zinc-100">
-                                                    <span className="flex items-center gap-1.5 uppercase tracking-wider"><Clock size={10} className="text-emerald-600/50" /> Resets in 60s</span>
+                                                <div className="pt-4 flex items-center justify-between text-[9px] text-[#8F837A] font-bold bg-[#F3F3F2] -mx-6 -mb-6 px-6 py-3 border-t border-[#E6E4E0]">
+                                                    <span className="flex items-center gap-1.5 uppercase tracking-wider"><Clock size={10} className="text-[#606C5A]/50" /> Resets in 60s</span>
                                                     <span className="uppercase tracking-[0.1em]">NODE_ID: {model.model_id.toUpperCase().split('-')[0]}_01</span>
                                                 </div>
                                             </CardContent>
@@ -627,12 +702,13 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                                 );
                             })}
                         </div>
-                    </div>
-                ) : (
-                    <div
-                        key="users"
-                        className="animate-in fade-in slide-in-from-right-4 duration-300"
-                    >
+                    </TabsContent>
+
+                    <TabsContent value="governance" className="space-y-6 outline-none">
+                        <div className="mb-4">
+                            <h2 className="font-serif text-xl tracking-tight text-[#2C2A28]">User Governance</h2>
+                            <p className="text-[13px] text-[#8F837A] mt-1">Manage access requests, provision users, and monitor individual usage.</p>
+                        </div>
                         <Tabs defaultValue="requests" className="w-full">
                             <TabsList className="grid w-full max-w-2xl grid-cols-4 mb-8 bg-zinc-100/50 border border-zinc-200 p-1 rounded-xl">
                                 <TabsTrigger value="requests" className="relative data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm rounded-lg transition-all hover:bg-white/50 text-zinc-500 text-xs font-bold">
@@ -1040,11 +1116,10 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                                     </CardContent>
                                 </Card>
                             </TabsContent>
-
                         </Tabs>
-                    </div>
-                )}
-            </div>
+                    </TabsContent>
+                </div>
+            </Tabs>
         </div>
     );
 }

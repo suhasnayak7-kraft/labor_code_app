@@ -31,12 +31,12 @@ export default function App() {
   const [profile, setProfile] = useState<any>(null);
   const [currentTab, setCurrentTab] = useState<'audit' | 'usage' | 'admin'>('audit');
   const [authView, setAuthView] = useState<'login' | 'request'>('login');
+  const [activeTool, setActiveTool] = useState<string | null>(null);
 
   const [file, setFile] = useState<File | null>(null);
   const [isAuditing, setIsAuditing] = useState(false);
   const [result, setResult] = useState<{ compliance_score: number; findings: string[] } | null>(null);
   const [totalTokens, setTotalTokens] = useState<number>(0);
-  const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -380,19 +380,59 @@ export default function App() {
             </div>
             <UsageDashboard token={session?.access_token} dailyLimit={profile?.daily_audit_limit} role={profile?.role} />
           </div>
+        ) : activeTool === null ? (
+          <div className="max-w-6xl mx-auto py-8 fade-in">
+            <div className="mb-10 text-center">
+              <h1 className="font-serif text-4xl text-[#2C2A28]">Compliance Hub</h1>
+              <p className="text-[#5E5E5E] mt-3 max-w-2xl mx-auto">
+                Select a tool to analyze your documents, calculate liabilities, and ensure complete compliance.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {/* Labour Code Auditor Card */}
+              <div
+                className="bg-[#FFFFFC] border border-[#E6E4E0] rounded-lg shadow-[0_1px_3px_rgba(95,87,80,0.07),0_1px_2px_rgba(95,87,80,0.04)] p-5 cursor-pointer flex flex-col items-start text-left h-full min-h-[220px] transition-colors duration-120 hover:border-[#C0B4A8] group"
+                onClick={() => setActiveTool('labor')}
+              >
+                <div className="w-10 h-10 rounded-full bg-[#ECF0E8] flex items-center justify-center mb-4">
+                  <FileText className="w-5 h-5 text-[#606C5A]" />
+                </div>
+                <span className="font-semibold text-[11px] uppercase tracking-[0.08em] text-[#606C5A] mb-2">LABOUR CODE</span>
+                <h3 className="font-serif text-[17px] text-[#2C2A28] mb-2">Labour Compliance Auditor</h3>
+                <p className="text-[13px] text-[#8F837A] mb-6 flex-grow">
+                  Check your policies against the 2025 Indian Labour Codes.
+                </p>
+                <span className="text-[13px] text-[#606C5A] font-medium flex items-center mt-auto group-hover:text-[#4F5A4A] transition-colors">
+                  Scan my policy <span className="ml-1">→</span>
+                </span>
+              </div>
+            </div>
+          </div>
         ) : (
-          <div className="max-w-4xl mx-auto align-top">
+          <div className="max-w-[800px] mx-auto bg-white p-8 md:p-12 rounded-lg shadow-[0_1px_3px_rgba(95,87,80,0.07)] border border-[#E6E4E0] my-4 fade-in">
+            <div className="mb-6 flex items-center text-[13px] text-[#8F837A]">
+              <button
+                onClick={() => setActiveTool(null)}
+                className="hover:text-[#2C2A28] transition-colors font-medium mr-2"
+              >
+                Hub
+              </button>
+              <span className="mr-2">→</span>
+              <span className="text-[#2C2A28] font-medium">Labour Code</span>
+            </div>
+
             <AnimatePresence mode="wait">
               {!isAuditing && !result && (
                 <div
                   key="upload"
-                  className="space-y-8 animate-in fade-in duration-500"
+                  className="space-y-8 fade-in"
                 >
                   <div className="text-center space-y-3 mb-10">
-                    <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight lg:text-5xl">
-                      Labour Code Compliance Auditor
+                    <h1 className="font-serif text-4xl tracking-tight text-[#2C2A28]">
+                      Labour Code Auditor
                     </h1>
-                    <p className="text-lg text-zinc-500 max-w-2xl mx-auto">
+                    <p className="text-[14px] leading-[1.6] text-[#5E5E5E] max-w-2xl mx-auto">
                       Upload your Employee Policy or Code of Conduct to instantly identify compliance risks against the latest 2025 Labour Regulations.
                     </p>
                   </div>
@@ -440,19 +480,17 @@ export default function App() {
                 </div>
               )}
 
-              {/* Cinematic Scanner */}
               {isAuditing && (
                 <div
                   key="scanning"
-                  className="flex flex-col items-center justify-center py-20 min-h-[50vh] animate-in zoom-in-95 duration-500"
+                  className="flex flex-col items-center justify-center py-20 min-h-[50vh] fade-in"
                 >
                   <div className="relative mb-8">
-                    <div className="absolute inset-0 bg-zinc-900 rounded-full animate-ping opacity-20 duration-1000" />
-                    <div className="bg-zinc-900 text-white p-6 rounded-full relative z-10 shadow-2xl">
+                    <div className="bg-[#606C5A] text-white p-6 rounded-full relative z-10 shadow-[0_1px_3px_rgba(95,87,80,0.07)]">
                       <ShieldCheck className="w-12 h-12" />
                     </div>
                   </div>
-                  <h2 className="text-2xl font-bold tracking-tight mb-2">Scanning Document...</h2>
+                  <h2 className="text-2xl font-bold tracking-tight mb-2 text-[#2C2A28]">Scanning Document...</h2>
                   <div className="font-medium h-6 text-zinc-500 flex justify-center w-full">
                     <TextLoop>
                       <span>Extracting Policy Text...</span>
@@ -468,11 +506,10 @@ export default function App() {
                 </div>
               )}
 
-              {/* Results Section */}
               {result && !isAuditing && (
                 <div
                   key="results"
-                  className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500"
+                  className="space-y-6 fade-in"
                 >
                   <div className="flex items-center justify-between border-b pb-2">
                     <h2 className="text-2xl font-bold tracking-tight">Audit Results</h2>
@@ -572,6 +609,19 @@ export default function App() {
                         </Accordion>
                       </div>
                     </div>
+                  </div>
+
+                  {/* Door Navigation */}
+                  <div className="mt-12 pt-8 border-t border-[#E6E4E0]">
+                    <button
+                      className="text-left group w-full"
+                      onClick={() => toast("Wage Simulator is coming in Tier 2.", { icon: "🚧" })}
+                    >
+                      <div className="text-[#5E5E5E] text-[13px] mb-1">Your wage structure may be contributing to this.</div>
+                      <div className="text-[#606C5A] font-medium group-hover:text-[#4F5A4A] transition-colors">
+                        Run a Wage Simulation to check. →
+                      </div>
+                    </button>
                   </div>
                 </div>
               )}
