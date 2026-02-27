@@ -11,7 +11,6 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "./components/ui/alert-dialog";
 import { Shield, Lock, Unlock, Mail, Loader2, UserX, UserCheck, Activity, KeyRound, Save, Eye, EyeOff, Zap, Clock, Globe, Users, Server } from 'lucide-react';
 import { toast } from 'sonner';
-import { motion, AnimatePresence } from 'framer-motion';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip as RechartsTooltip } from 'recharts';
 
 
@@ -232,10 +231,7 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
         const COLORS = ['#10b981', '#8b5cf6', '#3b82f6'];
 
         return (
-            <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
+            <div
                 className="bg-zinc-950/40 p-6 border-t border-zinc-800"
             >
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -334,7 +330,7 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                         <div className="text-[10px] text-zinc-400 italic text-center">Showing last 5 audits. View full history in Audit Logs.</div>
                     )}
                 </div>
-            </motion.div>
+            </div>
         );
     };
 
@@ -553,7 +549,7 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                     <Button
                         variant="outline"
                         size="sm"
-                        className={`bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50 gap-2 h-9 px-4 transition-all hover:scale-[1.02] active:scale-[0.98] ${isRefreshing ? 'opacity-50' : ''}`}
+                        className={`bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50 gap-2 h-9 px-4 transition-all ${isRefreshing ? 'opacity-50' : ''}`}
                         onClick={fetchData}
                         disabled={loading || isRefreshing}
                     >
@@ -563,36 +559,24 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                 </div>
             </div>
 
-            <AnimatePresence mode="wait">
+            <div className="relative">
                 {viewMode === 'observability' ? (
-                    <motion.div
+                    <div
                         key="observability"
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: 20 }}
-                        transition={{ duration: 0.3 }}
-                        className="space-y-6"
+                        className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-300"
                     >
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            {healthData.map((model, idx) => {
+                            {healthData.map((model) => {
                                 const rpmProgress = (model.rpm / (model.rpmLimit || 1)) * 100;
                                 const tpmProgress = (model.tpm / (model.tpmLimit || 1)) * 100;
                                 const isCritical = rpmProgress > 80 || tpmProgress > 80;
                                 const isExhausted = rpmProgress >= 100 || tpmProgress >= 100;
 
                                 return (
-                                    <motion.div
+                                    <div
                                         key={model.model_id}
-                                        initial={{ opacity: 0, y: 20 }}
-                                        animate={{
-                                            opacity: 1,
-                                            y: 0,
-                                            scale: isRefreshing ? [1, 1.01, 1] : 1
-                                        }}
-                                        transition={{
-                                            delay: idx * 0.1,
-                                            scale: { duration: 0.5, repeat: isRefreshing ? Infinity : 0 }
-                                        }}
+                                        className="transition-transform duration-300 ease-in-out"
+                                        style={isRefreshing ? { transform: 'scale(1.01)' } : {}}
                                     >
                                         <Card className="bg-white border-zinc-200 shadow-sm overflow-hidden group hover:border-emerald-500/30 transition-all duration-300">
                                             <div className={`h-1.5 w-full ${isExhausted ? 'bg-red-500' : isCritical ? 'bg-amber-500' : 'bg-emerald-500/20'}`} />
@@ -639,18 +623,15 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                                                 </div>
                                             </CardContent>
                                         </Card>
-                                    </motion.div>
+                                    </div>
                                 );
                             })}
                         </div>
-                    </motion.div>
+                    </div>
                 ) : (
-                    <motion.div
+                    <div
                         key="users"
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -20 }}
-                        transition={{ duration: 0.3 }}
+                        className="animate-in fade-in slide-in-from-right-4 duration-300"
                     >
                         <Tabs defaultValue="requests" className="w-full">
                             <TabsList className="grid w-full max-w-2xl grid-cols-4 mb-8 bg-zinc-100/50 border border-zinc-200 p-1 rounded-xl">
@@ -798,179 +779,177 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                                                         <TableCell colSpan={7} className="text-center h-24 text-zinc-500">No active users found.</TableCell>
                                                     </TableRow>
                                                 ) : (
-                                                    <AnimatePresence>
-                                                        {liveProfiles.map((profile) => (
-                                                            <React.Fragment key={profile.id}>
-                                                                <TableRow
-                                                                    className={`group cursor-pointer transition-colors border-zinc-100 ${profile.is_locked ? "bg-amber-50" : "hover:bg-zinc-50/50"}`}
-                                                                    onClick={() => setExpandedUser(expandedUser === profile.id ? null : profile.id)}
-                                                                >
-                                                                    <TableCell className="font-medium">
-                                                                        <div className="flex items-center gap-3">
-                                                                            <div className="w-8 h-8 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 text-xs font-bold">
-                                                                                {profile.full_name?.charAt(0) || 'U'}
-                                                                            </div>
-                                                                            <div>
-                                                                                <div className="flex items-center gap-2">
-                                                                                    <span className="text-sm font-semibold text-zinc-900">{profile.full_name || 'N/A'}</span>
-                                                                                    {profile.role === 'admin' && <Badge variant="outline" className="bg-emerald-50 text-emerald-600 border-emerald-100 text-[10px] h-4">Admin</Badge>}
-                                                                                </div>
-                                                                                <div className="text-[10px] text-zinc-400 uppercase tracking-wider font-bold">{profile.role}</div>
-                                                                            </div>
+                                                    liveProfiles.map((profile) => (
+                                                        <React.Fragment key={profile.id}>
+                                                            <TableRow
+                                                                className={`group cursor-pointer transition-colors border-zinc-100 ${profile.is_locked ? "bg-amber-50" : "hover:bg-zinc-50/50"}`}
+                                                                onClick={() => setExpandedUser(expandedUser === profile.id ? null : profile.id)}
+                                                            >
+                                                                <TableCell className="font-medium">
+                                                                    <div className="flex items-center gap-3">
+                                                                        <div className="w-8 h-8 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 text-xs font-bold">
+                                                                            {profile.full_name?.charAt(0) || 'U'}
                                                                         </div>
-                                                                    </TableCell>
-                                                                    <TableCell className="text-sm font-mono text-zinc-500">{profile.email || 'N/A'}</TableCell>
-                                                                    <TableCell>
-                                                                        <div className="text-sm font-medium text-zinc-900">{profile.company_name || 'Unknown Co.'}</div>
-                                                                        <div className="text-[10px] text-zinc-400 font-bold uppercase">{profile.industry || 'Unknown'} {profile.company_size && `• ${profile.company_size}`}</div>
-                                                                    </TableCell>
-                                                                    <TableCell className="text-center">
-                                                                        <div className="flex flex-col items-center gap-1.5 min-w-[120px]">
-                                                                            <div className="flex justify-between w-full text-[9px] font-bold text-zinc-500 uppercase px-1">
-                                                                                <span>Daily Usage</span>
-                                                                                <span>{profile.audits_used_today || 0} / {profile.daily_audit_limit} audits today</span>
+                                                                        <div>
+                                                                            <div className="flex items-center gap-2">
+                                                                                <span className="text-sm font-semibold text-zinc-900">{profile.full_name || 'N/A'}</span>
+                                                                                {profile.role === 'admin' && <Badge variant="outline" className="bg-emerald-50 text-emerald-600 border-emerald-100 text-[10px] h-4">Admin</Badge>}
                                                                             </div>
-                                                                            <div className="h-1 w-full bg-zinc-100 rounded-full overflow-hidden">
-                                                                                <div
-                                                                                    className={`h-full transition-all ${((profile.audits_used_today || 0) / (profile.daily_audit_limit || 1)) >= 1 ? 'bg-red-500' : 'bg-emerald-500/60'}`}
-                                                                                    style={{ width: `${Math.min(100, ((profile.audits_used_today || 0) / (profile.daily_audit_limit || 1)) * 100)}%` }}
-                                                                                />
-                                                                            </div>
-                                                                            <span className="text-[9px] text-zinc-400 font-mono uppercase tracking-tighter">{(profile.total_tokens_used || 0).toLocaleString()} PROCESSED</span>
+                                                                            <div className="text-[10px] text-zinc-400 uppercase tracking-wider font-bold">{profile.role}</div>
                                                                         </div>
-                                                                    </TableCell>
-                                                                    <TableCell className="text-center">
-                                                                        <Badge variant="outline" className="text-[9px] font-mono whitespace-nowrap bg-zinc-50 border-zinc-200 text-zinc-600 px-2 py-0">
-                                                                            {profile.total_audits_done || 0} AUDITS
-                                                                        </Badge>
-                                                                    </TableCell>
-                                                                    <TableCell onClick={(e) => e.stopPropagation()}>
-                                                                        <div className="flex items-center space-x-2">
-                                                                            <Switch
-                                                                                checked={!profile.is_locked}
-                                                                                onCheckedChange={() => toggleLock(profile.id, profile.is_locked)}
-                                                                                className={!profile.is_locked ? 'bg-emerald-500' : 'bg-amber-500'}
-                                                                                disabled={profile.role === 'admin'}
+                                                                    </div>
+                                                                </TableCell>
+                                                                <TableCell className="text-sm font-mono text-zinc-500">{profile.email || 'N/A'}</TableCell>
+                                                                <TableCell>
+                                                                    <div className="text-sm font-medium text-zinc-900">{profile.company_name || 'Unknown Co.'}</div>
+                                                                    <div className="text-[10px] text-zinc-400 font-bold uppercase">{profile.industry || 'Unknown'} {profile.company_size && `• ${profile.company_size}`}</div>
+                                                                </TableCell>
+                                                                <TableCell className="text-center">
+                                                                    <div className="flex flex-col items-center gap-1.5 min-w-[120px]">
+                                                                        <div className="flex justify-between w-full text-[9px] font-bold text-zinc-500 uppercase px-1">
+                                                                            <span>Daily Usage</span>
+                                                                            <span>{profile.audits_used_today || 0} / {profile.daily_audit_limit} audits today</span>
+                                                                        </div>
+                                                                        <div className="h-1 w-full bg-zinc-100 rounded-full overflow-hidden">
+                                                                            <div
+                                                                                className={`h-full transition-all ${((profile.audits_used_today || 0) / (profile.daily_audit_limit || 1)) >= 1 ? 'bg-red-500' : 'bg-emerald-500/60'}`}
+                                                                                style={{ width: `${Math.min(100, ((profile.audits_used_today || 0) / (profile.daily_audit_limit || 1)) * 100)}%` }}
                                                                             />
-                                                                            <span className="text-xs font-medium text-zinc-500 w-16">
-                                                                                {profile.is_locked ? <span className="text-amber-600 flex items-center gap-1"><Lock size={12} /> Blocked</span> : <span className="text-emerald-600 flex items-center gap-1"><Unlock size={12} /> Active</span>}
-                                                                            </span>
                                                                         </div>
-                                                                    </TableCell>
-                                                                    <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                                                                        <div className="flex justify-end gap-2 text-zinc-500">
-                                                                            <Dialog open={isEditLimitOpen && editingProfile?.id === profile.id} onOpenChange={(open) => {
-                                                                                if (open) {
-                                                                                    setEditingProfile(profile);
-                                                                                    setNewLimit(profile.daily_audit_limit);
-                                                                                    setOldPassword(profile.admin_password_ref || '');
-                                                                                    setResetPassword('');
-                                                                                    setShowOldPassword(false);
-                                                                                    setShowPassword(false);
-                                                                                }
-                                                                                setIsEditLimitOpen(open);
-                                                                            }}>
-                                                                                <DialogTrigger asChild>
-                                                                                    <Button variant="ghost" size="icon" className="h-8 w-8 hover:text-emerald-600 transition-all hover:scale-[1.1] active:scale-[0.9]">
-                                                                                        <Save size={16} />
-                                                                                    </Button>
-                                                                                </DialogTrigger>
-                                                                                <DialogContent className="sm:max-w-md bg-white border-zinc-200">
-                                                                                    <DialogHeader>
-                                                                                        <DialogTitle className="text-zinc-900">Update {profile.full_name || profile.company_name}</DialogTitle>
-                                                                                        <DialogDescription className="text-zinc-500">Modify the daily audit limit or reset their password.</DialogDescription>
-                                                                                    </DialogHeader>
-                                                                                    <div className="py-4 space-y-6">
-                                                                                        <div className="space-y-3">
-                                                                                            <label className="text-sm font-medium">Daily Audit Quota</label>
-                                                                                            <div className="flex items-center gap-3">
-                                                                                                <Button variant="outline" size="icon" onClick={() => setNewLimit(Math.max(0, newLimit - 1))}>-</Button>
-                                                                                                <Input type="number" value={newLimit} onChange={(e) => setNewLimit(parseInt(e.target.value) || 0)} className="w-20 text-center font-mono" />
-                                                                                                <Button variant="outline" size="icon" onClick={() => setNewLimit(newLimit + 1)}>+</Button>
-                                                                                            </div>
-                                                                                        </div>
-                                                                                        <div className="space-y-2">
-                                                                                            <label className="text-sm font-medium">Old Password <span className="text-zinc-400 font-normal">(for reference)</span></label>
-                                                                                            <div className="relative">
-                                                                                                <KeyRound className="absolute top-2.5 left-2.5 h-4 w-4 text-zinc-500" />
-                                                                                                <Input
-                                                                                                    type={showOldPassword ? "text" : "password"}
-                                                                                                    placeholder="Current password..."
-                                                                                                    value={oldPassword}
-                                                                                                    onChange={(e) => setOldPassword(e.target.value)}
-                                                                                                    className="pl-9 pr-9"
-                                                                                                />
-                                                                                                <button type="button" onClick={() => setShowOldPassword(p => !p)} className="absolute top-2.5 right-2.5 text-zinc-400 hover:text-zinc-700">
-                                                                                                    {showOldPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                                                                                                </button>
-                                                                                            </div>
-                                                                                        </div>
-                                                                                        <div className="flex items-center gap-2 text-zinc-400 text-sm">
-                                                                                            <div className="flex-1 h-px bg-zinc-200" />
-                                                                                            <span>↓ New Password</span>
-                                                                                            <div className="flex-1 h-px bg-zinc-200" />
-                                                                                        </div>
-                                                                                        <div className="space-y-2">
-                                                                                            <label className="text-sm font-medium">New Password <span className="text-zinc-400 font-normal">(Leave blank to keep current)</span></label>
-                                                                                            <div className="relative">
-                                                                                                <KeyRound className="absolute top-2.5 left-2.5 h-4 w-4 text-zinc-500" />
-                                                                                                <Input
-                                                                                                    type={showPassword ? "text" : "password"}
-                                                                                                    placeholder="New secure password..."
-                                                                                                    value={resetPassword}
-                                                                                                    onChange={(e) => setResetPassword(e.target.value)}
-                                                                                                    className="pl-9 pr-9"
-                                                                                                />
-                                                                                                <button
-                                                                                                    type="button"
-                                                                                                    onClick={() => setShowPassword(p => !p)}
-                                                                                                    className="absolute top-2.5 right-2.5 text-zinc-400 hover:text-zinc-700"
-                                                                                                >
-                                                                                                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                                                                                                </button>
-                                                                                            </div>
+                                                                        <span className="text-[9px] text-zinc-400 font-mono uppercase tracking-tighter">{(profile.total_tokens_used || 0).toLocaleString()} PROCESSED</span>
+                                                                    </div>
+                                                                </TableCell>
+                                                                <TableCell className="text-center">
+                                                                    <Badge variant="outline" className="text-[9px] font-mono whitespace-nowrap bg-zinc-50 border-zinc-200 text-zinc-600 px-2 py-0">
+                                                                        {profile.total_audits_done || 0} AUDITS
+                                                                    </Badge>
+                                                                </TableCell>
+                                                                <TableCell onClick={(e) => e.stopPropagation()}>
+                                                                    <div className="flex items-center space-x-2">
+                                                                        <Switch
+                                                                            checked={!profile.is_locked}
+                                                                            onCheckedChange={() => toggleLock(profile.id, profile.is_locked)}
+                                                                            className={!profile.is_locked ? 'bg-emerald-500' : 'bg-amber-500'}
+                                                                            disabled={profile.role === 'admin'}
+                                                                        />
+                                                                        <span className="text-xs font-medium text-zinc-500 w-16">
+                                                                            {profile.is_locked ? <span className="text-amber-600 flex items-center gap-1"><Lock size={12} /> Blocked</span> : <span className="text-emerald-600 flex items-center gap-1"><Unlock size={12} /> Active</span>}
+                                                                        </span>
+                                                                    </div>
+                                                                </TableCell>
+                                                                <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                                                                    <div className="flex justify-end gap-2 text-zinc-500">
+                                                                        <Dialog open={isEditLimitOpen && editingProfile?.id === profile.id} onOpenChange={(open) => {
+                                                                            if (open) {
+                                                                                setEditingProfile(profile);
+                                                                                setNewLimit(profile.daily_audit_limit);
+                                                                                setOldPassword(profile.admin_password_ref || '');
+                                                                                setResetPassword('');
+                                                                                setShowOldPassword(false);
+                                                                                setShowPassword(false);
+                                                                            }
+                                                                            setIsEditLimitOpen(open);
+                                                                        }}>
+                                                                            <DialogTrigger asChild>
+                                                                                <Button variant="ghost" size="icon" className="h-8 w-8 hover:text-emerald-600 transition-all">
+                                                                                    <Save size={16} />
+                                                                                </Button>
+                                                                            </DialogTrigger>
+                                                                            <DialogContent className="sm:max-w-md bg-white border-zinc-200">
+                                                                                <DialogHeader>
+                                                                                    <DialogTitle className="text-zinc-900">Update {profile.full_name || profile.company_name}</DialogTitle>
+                                                                                    <DialogDescription className="text-zinc-500">Modify the daily audit limit or reset their password.</DialogDescription>
+                                                                                </DialogHeader>
+                                                                                <div className="py-4 space-y-6">
+                                                                                    <div className="space-y-3">
+                                                                                        <label className="text-sm font-medium">Daily Audit Quota</label>
+                                                                                        <div className="flex items-center gap-3">
+                                                                                            <Button variant="outline" size="icon" onClick={() => setNewLimit(Math.max(0, newLimit - 1))}>-</Button>
+                                                                                            <Input type="number" value={newLimit} onChange={(e) => setNewLimit(parseInt(e.target.value) || 0)} className="w-20 text-center font-mono" />
+                                                                                            <Button variant="outline" size="icon" onClick={() => setNewLimit(newLimit + 1)}>+</Button>
                                                                                         </div>
                                                                                     </div>
-                                                                                    <DialogFooter className="sm:justify-between">
-                                                                                        <Button variant="ghost" className="text-zinc-500" onClick={() => { setIsEditLimitOpen(false); setResetPassword(""); }}>Cancel</Button>
-                                                                                        <Button onClick={handleSaveLimit}>Save Changes</Button>
-                                                                                    </DialogFooter>
-                                                                                </DialogContent>
-                                                                            </Dialog>
-                                                                            {profile.role !== 'admin' && (
-                                                                                <AlertDialog>
-                                                                                    <AlertDialogTrigger asChild>
-                                                                                        <Button variant="ghost" size="icon" className="h-8 w-8 hover:text-red-600"><UserX size={16} /></Button>
-                                                                                    </AlertDialogTrigger>
-                                                                                    <AlertDialogContent>
-                                                                                        <AlertDialogHeader>
-                                                                                            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                                                                                            <AlertDialogDescription>
-                                                                                                This action will revoke all access for <strong>{profile.company_name}</strong> and move them to the Deleted Archive.
-                                                                                            </AlertDialogDescription>
-                                                                                        </AlertDialogHeader>
-                                                                                        <AlertDialogFooter>
-                                                                                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                                                            <AlertDialogAction className="bg-red-600 hover:bg-red-700 text-white" onClick={() => softDeleteUser(profile.id)}>
-                                                                                                Revoke Access
-                                                                                            </AlertDialogAction>
-                                                                                        </AlertDialogFooter>
-                                                                                    </AlertDialogContent>
-                                                                                </AlertDialog>
-                                                                            )}
-                                                                        </div>
+                                                                                    <div className="space-y-2">
+                                                                                        <label className="text-sm font-medium">Old Password <span className="text-zinc-400 font-normal">(for reference)</span></label>
+                                                                                        <div className="relative">
+                                                                                            <KeyRound className="absolute top-2.5 left-2.5 h-4 w-4 text-zinc-500" />
+                                                                                            <Input
+                                                                                                type={showOldPassword ? "text" : "password"}
+                                                                                                placeholder="Current password..."
+                                                                                                value={oldPassword}
+                                                                                                onChange={(e) => setOldPassword(e.target.value)}
+                                                                                                className="pl-9 pr-9"
+                                                                                            />
+                                                                                            <button type="button" onClick={() => setShowOldPassword(p => !p)} className="absolute top-2.5 right-2.5 text-zinc-400 hover:text-zinc-700">
+                                                                                                {showOldPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                                                                            </button>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    <div className="flex items-center gap-2 text-zinc-400 text-sm">
+                                                                                        <div className="flex-1 h-px bg-zinc-200" />
+                                                                                        <span>↓ New Password</span>
+                                                                                        <div className="flex-1 h-px bg-zinc-200" />
+                                                                                    </div>
+                                                                                    <div className="space-y-2">
+                                                                                        <label className="text-sm font-medium">New Password <span className="text-zinc-400 font-normal">(Leave blank to keep current)</span></label>
+                                                                                        <div className="relative">
+                                                                                            <KeyRound className="absolute top-2.5 left-2.5 h-4 w-4 text-zinc-500" />
+                                                                                            <Input
+                                                                                                type={showPassword ? "text" : "password"}
+                                                                                                placeholder="New secure password..."
+                                                                                                value={resetPassword}
+                                                                                                onChange={(e) => setResetPassword(e.target.value)}
+                                                                                                className="pl-9 pr-9"
+                                                                                            />
+                                                                                            <button
+                                                                                                type="button"
+                                                                                                onClick={() => setShowPassword(p => !p)}
+                                                                                                className="absolute top-2.5 right-2.5 text-zinc-400 hover:text-zinc-700"
+                                                                                            >
+                                                                                                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                                                                            </button>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </div>
+                                                                                <DialogFooter className="sm:justify-between">
+                                                                                    <Button variant="ghost" className="text-zinc-500" onClick={() => { setIsEditLimitOpen(false); setResetPassword(""); }}>Cancel</Button>
+                                                                                    <Button onClick={handleSaveLimit}>Save Changes</Button>
+                                                                                </DialogFooter>
+                                                                            </DialogContent>
+                                                                        </Dialog>
+                                                                        {profile.role !== 'admin' && (
+                                                                            <AlertDialog>
+                                                                                <AlertDialogTrigger asChild>
+                                                                                    <Button variant="ghost" size="icon" className="h-8 w-8 hover:text-red-600"><UserX size={16} /></Button>
+                                                                                </AlertDialogTrigger>
+                                                                                <AlertDialogContent>
+                                                                                    <AlertDialogHeader>
+                                                                                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                                                                        <AlertDialogDescription>
+                                                                                            This action will revoke all access for <strong>{profile.company_name}</strong> and move them to the Deleted Archive.
+                                                                                        </AlertDialogDescription>
+                                                                                    </AlertDialogHeader>
+                                                                                    <AlertDialogFooter>
+                                                                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                                                        <AlertDialogAction className="bg-red-600 hover:bg-red-700 text-white" onClick={() => softDeleteUser(profile.id)}>
+                                                                                            Revoke Access
+                                                                                        </AlertDialogAction>
+                                                                                    </AlertDialogFooter>
+                                                                                </AlertDialogContent>
+                                                                            </AlertDialog>
+                                                                        )}
+                                                                    </div>
+                                                                </TableCell>
+                                                            </TableRow>
+                                                            {expandedUser === profile.id && (
+                                                                <TableRow className="bg-zinc-50/50 hover:bg-zinc-50/50">
+                                                                    <TableCell colSpan={7} className="p-0 border-none">
+                                                                        <UserExpansion profile={profile} />
                                                                     </TableCell>
                                                                 </TableRow>
-                                                                {expandedUser === profile.id && (
-                                                                    <TableRow className="bg-zinc-50/50 hover:bg-zinc-50/50">
-                                                                        <TableCell colSpan={7} className="p-0 border-none">
-                                                                            <UserExpansion profile={profile} />
-                                                                        </TableCell>
-                                                                    </TableRow>
-                                                                )}
-                                                            </React.Fragment>
-                                                        ))}
-                                                    </AnimatePresence>
+                                                            )}
+                                                        </React.Fragment>
+                                                    ))
                                                 )}
                                             </TableBody>
                                         </Table>
@@ -1063,9 +1042,9 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                             </TabsContent>
 
                         </Tabs>
-                    </motion.div>
+                    </div>
                 )}
-            </AnimatePresence>
+            </div>
         </div>
     );
 }

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { UploadCloud, ShieldCheck, FileText, AlertTriangle, Zap, CheckCircle2, LayoutDashboard, Activity, Download } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import { Button } from './components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card';
 import { Progress } from './components/ui/progress';
@@ -14,6 +14,8 @@ import { RequestAccess } from './RequestAccess';
 import { CheckStatus } from './CheckStatus';
 import { AdminDashboard } from './AdminDashboard';
 import { toast } from 'sonner';
+import { TextLoop } from './components/ui/text-loop';
+import ShimmerText from './components/kokonutui/shimmer-text';
 
 const SCAN_MESSAGES = [
   "Extracting Policy Text...",
@@ -34,7 +36,7 @@ export default function App() {
   const [isAuditing, setIsAuditing] = useState(false);
   const [result, setResult] = useState<{ compliance_score: number; findings: string[] } | null>(null);
   const [totalTokens, setTotalTokens] = useState<number>(0);
-  const [scanMessage, setScanMessage] = useState(SCAN_MESSAGES[0]);
+  const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -202,7 +204,6 @@ export default function App() {
     setIsAuditing(true);
     setResult(null);
     setScanProgress(0);
-    setScanMessage(SCAN_MESSAGES[0]);
 
     // Simulate scanning progress UX
     let messageIndex = 0;
@@ -213,7 +214,6 @@ export default function App() {
       });
 
       messageIndex = (messageIndex + 1) % SCAN_MESSAGES.length;
-      setScanMessage(SCAN_MESSAGES[messageIndex]);
     }, 2000);
 
     const formData = new FormData();
@@ -240,7 +240,6 @@ export default function App() {
       // Snap to 100% and clear interval
       clearInterval(progressInterval);
       setScanProgress(100);
-      setScanMessage("Audit Complete!");
 
       // Brief delay to show 100% before transitioning
       setTimeout(async () => {
@@ -362,7 +361,7 @@ export default function App() {
               </Badge>
             )}
 
-            <Button variant="ghost" size="sm" onClick={() => supabase.auth.signOut()} className="text-zinc-500 hover:text-zinc-900 transition-all hover:scale-[1.05] active:scale-[0.95]">
+            <Button variant="ghost" size="sm" onClick={() => supabase.auth.signOut()} className="text-zinc-500 hover:text-zinc-900 transition-colors">
               Sign Out
             </Button>
           </div>
@@ -385,13 +384,9 @@ export default function App() {
           <div className="max-w-4xl mx-auto align-top">
             <AnimatePresence mode="wait">
               {!isAuditing && !result && (
-                <motion.div
+                <div
                   key="upload"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
-                  transition={{ duration: 0.4 }}
-                  className="space-y-8"
+                  className="space-y-8 animate-in fade-in duration-500"
                 >
                   <div className="text-center space-y-3 mb-10">
                     <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight lg:text-5xl">
@@ -431,7 +426,7 @@ export default function App() {
 
                       <Button
                         size="lg"
-                        className="mt-6 w-full max-w-sm font-medium transition-all hover:scale-[1.02] active:scale-[0.98] shadow-md hover:shadow-lg"
+                        className="mt-6 w-full max-w-sm font-medium transition-colors shadow-md hover:shadow-lg"
                         disabled={!file}
                         onClick={(e) => { e.stopPropagation(); handleAudit(); }}
                       >
@@ -442,18 +437,14 @@ export default function App() {
                       </Button>
                     </CardContent>
                   </Card>
-                </motion.div>
+                </div>
               )}
 
               {/* Cinematic Scanner */}
               {isAuditing && (
-                <motion.div
+                <div
                   key="scanning"
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 1.05 }}
-                  transition={{ duration: 0.5 }}
-                  className="flex flex-col items-center justify-center py-20 min-h-[50vh]"
+                  className="flex flex-col items-center justify-center py-20 min-h-[50vh] animate-in zoom-in-95 duration-500"
                 >
                   <div className="relative mb-8">
                     <div className="absolute inset-0 bg-zinc-900 rounded-full animate-ping opacity-20 duration-1000" />
@@ -462,22 +453,26 @@ export default function App() {
                     </div>
                   </div>
                   <h2 className="text-2xl font-bold tracking-tight mb-2">Scanning Document...</h2>
-                  <p className="text-zinc-500 animate-pulse font-medium h-6">{scanMessage}</p>
+                  <div className="font-medium h-6 text-zinc-500 flex justify-center w-full">
+                    <TextLoop>
+                      <span>Extracting Policy Text...</span>
+                      <span>Consulting Indian Labour Codes...</span>
+                      <span>Identifying Risk Patterns...</span>
+                      <span>Finalizing Compliance Report...</span>
+                    </TextLoop>
+                  </div>
 
                   <div className="w-full max-w-md mt-8">
                     <Progress value={scanProgress} className="h-2 w-full transition-all duration-1000" />
                   </div>
-                </motion.div>
+                </div>
               )}
 
               {/* Results Section */}
               {result && !isAuditing && (
-                <motion.div
+                <div
                   key="results"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5, delay: 0.2 }}
-                  className="space-y-6"
+                  className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500"
                 >
                   <div className="flex items-center justify-between border-b pb-2">
                     <h2 className="text-2xl font-bold tracking-tight">Audit Results</h2>
@@ -496,7 +491,9 @@ export default function App() {
                     {/* Compliance Score Card */}
                     <Card className={`md:col-span-1 border-t-4 ${getScoreBorderColor(result.compliance_score)}`}>
                       <CardHeader>
-                        <CardTitle className="text-lg text-zinc-700">Compliance Score</CardTitle>
+                        <CardTitle className="text-lg text-zinc-700">
+                          <ShimmerText text="Compliance Score" className="p-0 justify-start !text-lg !font-semibold" />
+                        </CardTitle>
                         <CardDescription>100 = Fully compliant · 0 = Critical violations</CardDescription>
                       </CardHeader>
                       <CardContent className="flex flex-col items-center justify-center p-6 space-y-4">
@@ -542,9 +539,17 @@ export default function App() {
                       )}
 
                       <div className="bg-white rounded-xl border overflow-hidden shadow-sm">
-                        <div className="bg-zinc-50 border-b px-4 py-3 font-semibold text-zinc-700 flex items-center gap-2">
-                          <FileText className="w-4 h-4" />
-                          Detailed Findings
+                        <div className="bg-zinc-50 border-b px-4 py-3 font-semibold text-zinc-700 flex items-center justify-between gap-2">
+                          <span className="flex items-center gap-2">
+                            <FileText className="w-4 h-4" />
+                            Detailed Findings
+                          </span>
+                          <span className="flex items-center gap-2">
+                            <Badge variant="secondary" className="font-mono bg-zinc-200/50 text-zinc-600">
+                              {result.findings.length}
+                            </Badge>
+                            Issues
+                          </span>
                         </div>
                         <Accordion type="single" collapsible className="w-full px-4">
                           {result.findings.map((finding, index) => (
@@ -568,7 +573,7 @@ export default function App() {
                       </div>
                     </div>
                   </div>
-                </motion.div>
+                </div>
               )}
             </AnimatePresence>
           </div>
