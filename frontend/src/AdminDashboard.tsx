@@ -9,7 +9,7 @@ import { Badge } from './components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "./components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "./components/ui/alert-dialog";
-import { Shield, Lock, Unlock, Mail, Loader2, UserX, UserCheck, Activity, KeyRound, Save, Eye, EyeOff, Zap, Clock, Globe, Users, AlertCircle, FileText } from 'lucide-react';
+import { Shield, Lock, Unlock, Mail, Loader2, UserX, UserCheck, Activity, KeyRound, Save, Eye, EyeOff, Zap, Clock, Globe, Users, AlertCircle, FileText, FileCheck, Calculator, FolderOpen, CalendarDays, AlertTriangle, TrendingUp } from 'lucide-react';
 import { toast } from 'sonner';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip as RechartsTooltip } from 'recharts';
 
@@ -65,6 +65,22 @@ interface WaitingListEntry {
     created_at: string;
 }
 
+interface ToolConfig {
+    id: string;
+    name: string;
+    description: string;
+    icon: string;
+    tier: number;
+    status: 'live' | 'coming_soon' | 'disabled';
+    free_limit: number;
+    paid_limit: number;
+    team_limit: number;
+    enabled_for_free: boolean;
+    enabled_for_paid: boolean;
+    enabled_for_team: boolean;
+    sort_order: number;
+}
+
 export function AdminDashboard({ session, adminProfile }: { session: any, adminProfile: any }) {
     const [profiles, setProfiles] = useState<Profile[]>([]);
     const [waitingList, setWaitingList] = useState<WaitingListEntry[]>([]);
@@ -76,7 +92,19 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
         { model_id: 'claude-3-5-sonnet', provider: 'anthropic', rpm: 0, tpm: 0, rpmLimit: 5, tpmLimit: 40000, isActive: false },
         { model_id: 'gpt-4o', provider: 'openai', rpm: 0, tpm: 0, rpmLimit: 3, tpmLimit: 30000, isActive: false }
     ]);
+    const [toolConfigs, setToolConfigs] = useState<ToolConfig[]>([]);
+    const [isSavingTool, setIsSavingTool] = useState<string | null>(null);
     const [isRefreshing, setIsRefreshing] = useState(false);
+
+    // Tool icon map
+    const toolIconMap: Record<string, React.ReactNode> = {
+        'FileCheck': <FileCheck size={18} className="text-[#606C5A]" />,
+        'Calculator': <Calculator size={18} className="text-[#606C5A]" />,
+        'FolderOpen': <FolderOpen size={18} className="text-[#606C5A]" />,
+        'CalendarDays': <CalendarDays size={18} className="text-[#606C5A]" />,
+        'AlertTriangle': <AlertTriangle size={18} className="text-[#606C5A]" />,
+        'TrendingUp': <TrendingUp size={18} className="text-[#606C5A]" />,
+    };
 
     // Modal States
     const [selectedWaitlistEntry, setSelectedWaitlistEntry] = useState<WaitingListEntry | null>(null);
@@ -167,7 +195,31 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
             setWaitingList(waitingData);
         }
 
+        // Fetch Tool Configs
+        const { data: toolData } = await supabase
+            .from('tool_config')
+            .select('*')
+            .order('sort_order', { ascending: true });
+
+        if (toolData) setToolConfigs(toolData as ToolConfig[]);
+
         setLoading(false);
+    };
+
+    const updateToolConfig = async (toolId: string, field: string, value: boolean | number) => {
+        setIsSavingTool(toolId);
+        const { error } = await supabase
+            .from('tool_config')
+            .update({ [field]: value })
+            .eq('id', toolId);
+
+        if (!error) {
+            setToolConfigs(prev => prev.map(t => t.id === toolId ? { ...t, [field]: value } : t));
+            toast.success('Tool configuration updated.');
+        } else {
+            toast.error('Failed to update tool config.');
+        }
+        setIsSavingTool(null);
     };
 
     const fetchStats = async () => {
@@ -526,6 +578,7 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                         <TabsList className="bg-[#F3F3F2] border border-[#E6E4E0] p-1 h-auto rounded-lg mr-2">
                             <TabsTrigger value="pulse" className="text-[13px] font-medium data-[state=active]:bg-white data-[state=active]:text-[#2C2A28] data-[state=active]:shadow-[0_1px_2px_rgba(95,87,80,0.06)] text-[#8F837A] rounded-md px-4 py-1.5 transition-all">Pulse</TabsTrigger>
                             <TabsTrigger value="governance" className="text-[13px] font-medium data-[state=active]:bg-white data-[state=active]:text-[#2C2A28] data-[state=active]:shadow-[0_1px_2px_rgba(95,87,80,0.06)] text-[#8F837A] rounded-md px-4 py-1.5 transition-all">Governance</TabsTrigger>
+                            <TabsTrigger value="plans" className="text-[13px] font-medium data-[state=active]:bg-white data-[state=active]:text-[#2C2A28] data-[state=active]:shadow-[0_1px_2px_rgba(95,87,80,0.06)] text-[#8F837A] rounded-md px-4 py-1.5 transition-all">Plans & Tools</TabsTrigger>
                             <TabsTrigger value="system" className="text-[13px] font-medium data-[state=active]:bg-white data-[state=active]:text-[#2C2A28] data-[state=active]:shadow-[0_1px_2px_rgba(95,87,80,0.06)] text-[#8F837A] rounded-md px-4 py-1.5 transition-all">System</TabsTrigger>
                         </TabsList>
 
@@ -635,6 +688,180 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                             </Card>
                         </div>
                     </TabsContent>
+
+                    {/* PLANS & TOOLS TAB */}
+                    <TabsContent value="plans" className="space-y-8 outline-none">
+                        <div className="mb-2">
+                            <h2 className="font-serif text-xl tracking-tight text-[#2C2A28]">Plans & Tools</h2>
+                            <p className="text-[13px] text-[#8F837A] mt-1">Configure which tools are available per plan tier. Changes save instantly to the database.</p>
+                        </div>
+
+                        {/* Plan Tier Cards */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            {[
+                                {
+                                    name: 'Free',
+                                    price: '₹0 / month',
+                                    description: 'Self-serve access to get started',
+                                    features: ['3 Labour Code audits / month', '1 Doc Vault download', 'Basic compliance score'],
+                                    badge: 'bg-[#F3F3F2] text-[#5E5E5E] border-[#E6E4E0]',
+                                    accent: 'border-t-[#C0B4A8]',
+                                },
+                                {
+                                    name: 'Paid',
+                                    price: '₹999 / month',
+                                    description: 'For compliance professionals & CAs',
+                                    features: ['Unlimited audits', 'All live tools', 'Priority AI queue', 'Export PDF reports'],
+                                    badge: 'bg-[#ECF0E8] text-[#606C5A] border-[#DCE4D5]',
+                                    accent: 'border-t-[#606C5A]',
+                                },
+                                {
+                                    name: 'Team',
+                                    price: '₹2,499 / month',
+                                    description: 'For firms with multiple compliance users',
+                                    features: ['Up to 5 seats', 'All tools + priority support', 'Shared audit history', 'Team billing'],
+                                    badge: 'bg-[#EBF3FA] text-[#4E7A94] border-[#C3DBE9]',
+                                    accent: 'border-t-[#4E7A94]',
+                                }
+                            ].map(plan => (
+                                <Card key={plan.name} className={`bg-[#FFFFFC] border-[#E6E4E0] border-t-4 ${plan.accent} shadow-[0_1px_3px_rgba(95,87,80,0.07)]`}>
+                                    <CardHeader className="pb-3">
+                                        <div className="flex items-center justify-between">
+                                            <CardTitle className="text-[15px] font-semibold text-[#2C2A28]">{plan.name}</CardTitle>
+                                            <Badge className={`text-[10px] uppercase font-bold tracking-widest border ${plan.badge}`}>{plan.name}</Badge>
+                                        </div>
+                                        <div className="text-xl font-bold font-serif text-[#2C2A28] mt-1">{plan.price}</div>
+                                        <CardDescription className="text-[12px] text-[#8F837A]">{plan.description}</CardDescription>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <ul className="space-y-1.5">
+                                            {plan.features.map(f => (
+                                                <li key={f} className="flex items-center gap-2 text-[12px] text-[#5E5E5E]">
+                                                    <div className="w-1 h-1 rounded-full bg-[#C0B4A8] flex-shrink-0" />
+                                                    {f}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </CardContent>
+                                </Card>
+                            ))}
+                        </div>
+
+                        {/* Tool Registry Table */}
+                        <Card className="bg-[#FFFFFC] border-[#E6E4E0] shadow-[0_1px_3px_rgba(95,87,80,0.07)]">
+                            <CardHeader className="pb-2 border-b border-[#E6E4E0]">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <CardTitle className="text-[15px] font-medium text-[#2C2A28]">Tool Registry</CardTitle>
+                                        <CardDescription className="text-[12px] text-[#8F837A] mt-0.5">Enable or disable tools per plan. Changes apply immediately.</CardDescription>
+                                    </div>
+                                    <Badge className="bg-[#F3F3F2] text-[#8F837A] border-[#E6E4E0] text-[10px] uppercase tracking-wider">
+                                        {toolConfigs.filter(t => t.status === 'live').length} of {toolConfigs.length} Live
+                                    </Badge>
+                                </div>
+                            </CardHeader>
+                            <CardContent className="p-0">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow className="border-b border-[#E6E4E0] hover:bg-transparent">
+                                            <TableHead className="text-[10px] font-bold uppercase tracking-widest text-[#8F837A] pl-6 py-3">Tool</TableHead>
+                                            <TableHead className="text-[10px] font-bold uppercase tracking-widest text-[#8F837A] text-center">Tier</TableHead>
+                                            <TableHead className="text-[10px] font-bold uppercase tracking-widest text-[#8F837A] text-center">Status</TableHead>
+                                            <TableHead className="text-[10px] font-bold uppercase tracking-widest text-[#8F837A] text-center">Free</TableHead>
+                                            <TableHead className="text-[10px] font-bold uppercase tracking-widest text-[#8F837A] text-center">Free Limit</TableHead>
+                                            <TableHead className="text-[10px] font-bold uppercase tracking-widest text-[#8F837A] text-center">Paid</TableHead>
+                                            <TableHead className="text-[10px] font-bold uppercase tracking-widest text-[#8F837A] text-center pr-6">Team</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {toolConfigs.map(tool => {
+                                            const isLive = tool.status === 'live';
+                                            const isSaving = isSavingTool === tool.id;
+                                            return (
+                                                <TableRow key={tool.id} className="border-b border-[#E6E4E0] last:border-0 hover:bg-[#F3F3F2]/40 transition-colors">
+                                                    <TableCell className="pl-6 py-4">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="p-1.5 bg-[#F3F3F2] rounded-md border border-[#E6E4E0]">
+                                                                {toolIconMap[tool.icon] || <FileText size={18} className="text-[#8F837A]" />}
+                                                            </div>
+                                                            <div>
+                                                                <div className="text-[13px] font-medium text-[#2C2A28]">{tool.name}</div>
+                                                                <div className="text-[11px] text-[#8F837A] mt-0.5 max-w-[200px] leading-snug">{tool.description}</div>
+                                                            </div>
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell className="text-center">
+                                                        <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-wider text-[#8F837A] border-[#E6E4E0]">
+                                                            T{tool.tier}
+                                                        </Badge>
+                                                    </TableCell>
+                                                    <TableCell className="text-center">
+                                                        {isLive ? (
+                                                            <Badge className="bg-[#ECF0E8] text-[#606C5A] border border-[#DCE4D5] text-[10px] font-bold uppercase tracking-wider">Live</Badge>
+                                                        ) : (
+                                                            <Badge className="bg-[#F3F3F2] text-[#C0B4A8] border border-[#E6E4E0] text-[10px] font-bold uppercase tracking-wider">Soon</Badge>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell className="text-center">
+                                                        <Switch
+                                                            checked={tool.enabled_for_free}
+                                                            onCheckedChange={(val) => updateToolConfig(tool.id, 'enabled_for_free', val)}
+                                                            disabled={isSaving}
+                                                            className="data-[state=checked]:bg-[#606C5A]"
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell className="text-center">
+                                                        {tool.enabled_for_free ? (
+                                                            <div className="flex items-center justify-center gap-1.5">
+                                                                <Input
+                                                                    type="number"
+                                                                    min={0}
+                                                                    defaultValue={tool.free_limit === -1 ? '' : tool.free_limit}
+                                                                    placeholder={tool.free_limit === -1 ? '∞' : String(tool.free_limit)}
+                                                                    className="w-16 h-7 text-center text-[12px] border-[#E6E4E0] text-[#2C2A28]"
+                                                                    onBlur={(e) => {
+                                                                        const val = e.target.value === '' ? -1 : parseInt(e.target.value, 10);
+                                                                        if (!isNaN(val) && val !== tool.free_limit) {
+                                                                            updateToolConfig(tool.id, 'free_limit', val);
+                                                                        }
+                                                                    }}
+                                                                />
+                                                                <span className="text-[10px] text-[#8F837A]">/mo</span>
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-[12px] text-[#C0B4A8]">—</span>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell className="text-center">
+                                                        <Switch
+                                                            checked={tool.enabled_for_paid}
+                                                            onCheckedChange={(val) => updateToolConfig(tool.id, 'enabled_for_paid', val)}
+                                                            disabled={isSaving}
+                                                            className="data-[state=checked]:bg-[#606C5A]"
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell className="text-center pr-6">
+                                                        <Switch
+                                                            checked={tool.enabled_for_team}
+                                                            onCheckedChange={(val) => updateToolConfig(tool.id, 'enabled_for_team', val)}
+                                                            disabled={isSaving}
+                                                            className="data-[state=checked]:bg-[#606C5A]"
+                                                        />
+                                                    </TableCell>
+                                                </TableRow>
+                                            );
+                                        })}
+                                    </TableBody>
+                                </Table>
+                                {toolConfigs.length === 0 && (
+                                    <div className="py-12 text-center text-[13px] text-[#8F837A] italic">
+                                        Loading tool configurations...
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+
                     <TabsContent value="system" className="space-y-6 outline-none">
                         <div className="mb-4">
                             <h2 className="font-serif text-xl tracking-tight text-[#2C2A28]">System Health & Cost</h2>
