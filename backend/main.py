@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 import traceback
 from pypdf import PdfReader
 from dotenv import load_dotenv
-from google import genai
+import google.generativeai as genai
 from anthropic import Anthropic
 from openai import OpenAI
 from pydantic import BaseModel
@@ -26,12 +26,13 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
-if not all([SUPABASE_URL, SUPABASE_KEY, GEMINI_API_KEY]):
-    raise RuntimeError("Missing critical environment variables (Supabase or Gemini).")
+if not all([SUPABASE_URL, SUPABASE_KEY]):
+    raise RuntimeError("Missing critical environment variables (Supabase).")
 
 # Initialize clients
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-genai_client = genai.Client(api_key=GEMINI_API_KEY)
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
 
 # Optional clients
 anthropic_client = Anthropic(api_key=ANTHROPIC_API_KEY) if ANTHROPIC_API_KEY else None
@@ -106,12 +107,12 @@ def extract_and_clean_text(file_bytes: bytes) -> str:
     return clean_text
 
 def generate_embedding(text: str) -> list[float]:
-    result = genai_client.models.embed_content(
-        model="gemini-embedding-001",
-        contents=text,
-        config={"output_dimensionality": 768}
+    result = genai.embed_content(
+        model="models/embedding-001",
+        content=text,
+        task_type="retrieval_document"
     )
-    return result.embeddings[0].values
+    return result['embedding']
 
 async def get_current_user(authorization: Optional[str] = Header(None)):
     if not authorization or not authorization.startswith("Bearer "):
@@ -292,8 +293,8 @@ Return ONLY a raw JSON object (no markdown, no code fences) in this exact schema
                 # Default: Gemini 1.5 Flash (to handle 250k tokens comfortably within limits)
                 final_provider = "google"
                 final_model = "gemini-1.5-flash"
-                response = genai_client.models.generate_content(
-                    model=final_model,
+                model = genai.GenerativeModel(final_model)
+                response = model.generate_content(
                     contents=system_instructions + "\n\n" + prompt,
                 )
                 response_text = response.text
@@ -306,8 +307,8 @@ Return ONLY a raw JSON object (no markdown, no code fences) in this exact schema
             # Final Fallback to Gemini 1.5 Flash if selected provider fails
             final_provider = "google"
             final_model = "gemini-1.5-flash"
-            response = genai_client.models.generate_content(
-                model=final_model,
+            model = genai.GenerativeModel(final_model)
+            response = model.generate_content(
                 contents=system_instructions + "\n\n" + prompt,
             )
             response_text = response.text
@@ -445,9 +446,10 @@ async def ingest_markdown(
     Ingest a Markdown (.md) file into the pgvector knowledge base.
     Chunks the text into ~500-word segments, embeds each with Gemini, and upserts to 'labour_laws'.
     """
+    t0 = time.time()
     # 1. Verify admin
-    profile_res = supabase.table("profiles").select("role").eq("id", admin_user.id).execute()
-    if not profile_res.data or profile_res.data[0].get("role") != "admin":
+    profile_res = supabase.table("profiles").select("role").eq("id", admin_user.id).single().execute()
+    if not profile_res.data or profile_res.data.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Admin access required.")
 
     # 2. Validate file type
@@ -483,22 +485,33 @@ async def ingest_markdown(
         if not chunks:
             raise HTTPException(status_code=400, detail="No content found in the file.")
 
-        # 4. Embed and upsert each chunk
+        # 4. Embed EVERYTHING as a single batch call to avoid Vercel timeouts (takes ~2 seconds for 300 chunks instead of 100 seconds)
+        try:
+            embed_results = genai.embed_content(
+                model="models/embedding-001",
+                content=chunks,
+                task_type="retrieval_document"
+            )
+            embeddings = embed_results['embedding']
+        except Exception as e:
+            print(f"Batch embedding failed: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to generate embeddings from Gemini API: {str(e)}")
+
+        # 5. Fast Batch Insert to Supabase
         ingested = 0
-
-        for i, chunk in enumerate(chunks):
+        rows_to_insert = [{"content": chunk, "embedding": emb} for chunk, emb in zip(chunks, embeddings)]
+        
+        # Insert in chunks of 50 to avoid payload size limits to Postgres
+        for i in range(0, len(rows_to_insert), 50):
+            batch = rows_to_insert[i:i+50]
             try:
-                embedding = generate_embedding(chunk)
-                # Insert to labour_laws table — matches existing schema (content + embedding only)
-                supabase.table("labour_laws").insert({
-                    "content": chunk,
-                    "embedding": embedding,
-                }).execute()
-                ingested += 1
-            except Exception as chunk_err:
-                print(f"Error ingesting chunk {i}: {chunk_err}")
-                # Continue with remaining chunks
+                supabase.table("labour_laws").insert(batch).execute()
+                ingested += len(batch)
+            except Exception as e:
+                print(f"Failed to insert batch {i}-{i+50}: {e}")
 
+        # Final record keeping
+        response_time_ms = int((time.time() - t0) * 1000)
         return {
             "success": True,
             "filename": file.filename,
