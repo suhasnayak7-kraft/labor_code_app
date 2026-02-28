@@ -25,6 +25,10 @@ A comprehensive guide to building a lightweight, modular multi-tool SaaS platfor
 ### **Migration & Rollout**
 11. **[MIGRATION_STRATEGY.md](./11-MIGRATION_STRATEGY.md)** - Converting existing single-tool app to multi-tool platform
 
+### **Legal & Compliance** (Required for Production)
+12. **[PRIVACY_POLICY_TEMPLATE.md](./PRIVACY_POLICY_TEMPLATE.md)** - DPDP Act 2023 compliant Privacy Policy template (ready-to-publish)
+13. **[TERMS_OF_SERVICE_TEMPLATE.md](./TERMS_OF_SERVICE_TEMPLATE.md)** - Terms of Service template aligned with Indian law (arbitration, consumer protection)
+
 ---
 
 ## 🚀 Quick Start Path
@@ -135,6 +139,8 @@ See DESIGN_SYSTEM.md for complete token reference.
 | DATA_ISOLATION_PRIVACY.md | Security & RLS | Backend devs, Security |
 | PRICING_FEATURE_GATING.md | Pricing logic & gates | Product, Backend devs |
 | MIGRATION_STRATEGY.md | Conversion plan | All (if migrating) |
+| PRIVACY_POLICY_TEMPLATE.md | Legal compliance (DPDP Act 2023) | All (required for launch) |
+| TERMS_OF_SERVICE_TEMPLATE.md | Legal compliance (Indian law) | All (required for launch) |
 
 ---
 
@@ -153,7 +159,9 @@ multi-saas-platform-architecture-design/
 ├── 8-TOOL_SCAFFOLDING_TEMPLATE.md
 ├── 9-DATA_ISOLATION_PRIVACY.md
 ├── 10-PRICING_FEATURE_GATING.md
-└── 11-MIGRATION_STRATEGY.md
+├── 11-MIGRATION_STRATEGY.md
+├── PRIVACY_POLICY_TEMPLATE.md (DPDP 2023 compliant)
+└── TERMS_OF_SERVICE_TEMPLATE.md (Indian law aligned)
 ```
 
 ---
@@ -178,6 +186,7 @@ Once platform is built:
 3. **Study DESIGN_SYSTEM.md** to maintain visual consistency
 4. **Use TOOL_SCAFFOLDING_TEMPLATE.md** when building each new tool
 5. **Implement MIGRATION_STRATEGY.md** if converting existing app
+6. **Customize & Publish PRIVACY_POLICY_TEMPLATE.md & TERMS_OF_SERVICE_TEMPLATE.md** before going live (legal requirement)
 
 ---
 
