@@ -96,6 +96,26 @@ def extract_and_clean_text(file_bytes: bytes) -> str:
     clean_text = re.sub(r'\s+', ' ', raw_text).strip()
     return clean_text
 
+def extract_text_from_docx(file_bytes: bytes) -> str:
+    """Extract text from a .docx (Word) file."""
+    from docx import Document
+
+    try:
+        doc = Document(io.BytesIO(file_bytes))
+        paragraphs = [para.text for para in doc.paragraphs if para.text.strip()]
+        full_text = "\n".join(paragraphs)
+
+        # Also extract text from tables
+        for table in doc.tables:
+            for row in table.rows:
+                row_text = [cell.text.strip() for cell in row.cells]
+                full_text += "\n" + " | ".join(row_text)
+
+        clean_text = re.sub(r'\s+', ' ', full_text).strip()
+        return clean_text
+    except Exception as e:
+        raise ValueError(f"Could not read .docx file: {str(e)}")
+
 def generate_embedding(text: str) -> list[float]:
     result = gemini.models.embed_content(
         model="gemini-embedding-001",
@@ -171,20 +191,29 @@ async def audit_policy(
                 detail=f"Daily audit limit reached ({usage_count}/{daily_limit}). Contact your administrator to increase your quota."
             )
 
-    if not file.filename.lower().endswith('.pdf'):
-        raise HTTPException(status_code=400, detail="Only PDF files are supported. Please upload a .pdf file.")
+    file_ext = file.filename.lower()
+    if not (file_ext.endswith('.pdf') or file_ext.endswith('.docx')):
+        raise HTTPException(status_code=400, detail="Only PDF and Word (.docx) files are supported. Please upload a .pdf or .docx file.")
 
     try:
-        # 1. Convert PDF to text
+        # 1. Convert Document to text (PDF or DOCX)
         file_bytes = await file.read()
         if len(file_bytes) > 20 * 1024 * 1024:  # 20MB guard
-            raise HTTPException(status_code=400, detail="File too large. Maximum PDF size is 20MB.")
+            raise HTTPException(status_code=400, detail="File too large. Maximum file size is 20MB.")
 
         try:
-            policy_text = extract_and_clean_text(file_bytes)
-        except Exception as pdf_err:
-            print(f"PDF extraction error: {pdf_err}")
-            raise HTTPException(status_code=400, detail="Could not read the PDF. The file may be corrupted, password-protected, or image-only (scanned). Please try a text-based PDF.")
+            if file.filename.lower().endswith('.pdf'):
+                policy_text = extract_and_clean_text(file_bytes)
+            elif file.filename.lower().endswith('.docx'):
+                policy_text = extract_text_from_docx(file_bytes)
+            else:
+                raise HTTPException(status_code=400, detail="Unsupported file type. Please upload a .pdf or .docx file.")
+        except HTTPException:
+            raise
+        except Exception as doc_err:
+            print(f"Document extraction error: {doc_err}")
+            file_type = "Word document" if file.filename.lower().endswith('.docx') else "PDF"
+            raise HTTPException(status_code=400, detail=f"Could not read the {file_type}. The file may be corrupted or invalid. Please try another file.")
 
         if not policy_text or len(policy_text.strip()) < 50:
             raise HTTPException(status_code=400, detail="Could not extract sufficient text from the PDF. It may be a scanned/image-based document. Please use a text-based PDF.")
