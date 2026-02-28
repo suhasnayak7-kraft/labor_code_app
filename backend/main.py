@@ -5,13 +5,14 @@ import json
 import time
 from datetime import datetime
 from typing import Optional
-from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Header, Form
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Header, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+import traceback
 from pypdf import PdfReader
 from dotenv import load_dotenv
 from google import genai
-from anthropic import Anthropic
-from openai import OpenAI
+from google.genai import types as genai_types
 from pydantic import BaseModel
 from supabase import create_client, Client
 
@@ -21,19 +22,21 @@ load_dotenv()
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
-if not all([SUPABASE_URL, SUPABASE_KEY, GEMINI_API_KEY]):
-    raise RuntimeError("Missing critical environment variables (Supabase or Gemini).")
+if not all([SUPABASE_URL, SUPABASE_KEY]):
+    raise RuntimeError("Missing critical environment variables (Supabase).")
+
+if not GEMINI_API_KEY:
+    raise RuntimeError("Missing GEMINI_API_KEY environment variable.")
 
 # Initialize clients
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-genai_client = genai.Client(api_key=GEMINI_API_KEY)
+gemini = genai.Client(api_key=GEMINI_API_KEY)
 
-# Optional clients
-anthropic_client = Anthropic(api_key=ANTHROPIC_API_KEY) if ANTHROPIC_API_KEY else None
-openai_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+# Primary model: Gemini 2.5 Flash (GA, 250K TPM free tier)
+# Fallback model: Gemini 1.5 Flash (higher RPD on free tier)
+PRIMARY_MODEL = "gemini-2.5-flash"
+FALLBACK_MODEL = "gemini-1.5-flash"
 
 app = FastAPI(title="Labour Code Auditor API")
 
@@ -52,22 +55,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    err_msg = traceback.format_exc()
+    print(f"Global UI Error Catcher: {err_msg}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Uncaught Python Error: {str(exc)} | Trace: {err_msg[:300]}"}
+    )
+
 class AuditResponse(BaseModel):
     compliance_score: int
     findings: list[str]
     model_id: str
     provider: str
     response_time_ms: int
-
-class ModelStat(BaseModel):
-    model_id: str
-    provider: str
-    status: str
-    rpm: int
-    tpm: int
-
-class AdminStatsResponse(BaseModel):
-    models: list[ModelStat]
 
 class UserCreateRequest(BaseModel):
     email: str
@@ -95,12 +97,12 @@ def extract_and_clean_text(file_bytes: bytes) -> str:
     return clean_text
 
 def generate_embedding(text: str) -> list[float]:
-    result = genai_client.models.embed_content(
+    result = gemini.models.embed_content(
         model="gemini-embedding-001",
         contents=text,
-        config={"output_dimensionality": 768}
+        config=genai_types.EmbedContentConfig(output_dimensionality=768)
     )
-    return result.embeddings[0].values
+    return list(result.embeddings[0].values)
 
 async def get_current_user(authorization: Optional[str] = Header(None)):
     if not authorization or not authorization.startswith("Bearer "):
@@ -117,6 +119,25 @@ async def get_current_user(authorization: Optional[str] = Header(None)):
         print(f"Auth error: {e}")
         raise HTTPException(status_code=401, detail="Authentication failed")
 
+@app.get("/audit/status")
+async def audit_status(user = Depends(get_current_user)):
+    """Returns today's usage count and daily limit for the current user."""
+    profile_res = supabase.table("profiles").select("daily_audit_limit, role").eq("id", user.id).execute()
+    if not profile_res.data:
+        raise HTTPException(status_code=403, detail="Account not found.")
+    profile = profile_res.data[0]
+    is_admin = profile.get("role") == "admin"
+    daily_limit = profile.get("daily_audit_limit", 3)
+    today_str = datetime.utcnow().date().isoformat()
+    logs_res = supabase.table("api_logs").select("id").eq("user_id", user.id).gte("created_at", today_str).execute()
+    usage_count = len(logs_res.data) if logs_res.data else 0
+    return {
+        "usage_today": usage_count,
+        "daily_limit": daily_limit,
+        "remaining": max(0, daily_limit - usage_count) if not is_admin else 999,
+        "is_admin": is_admin
+    }
+
 @app.post("/audit", response_model=AuditResponse)
 async def audit_policy(
     file: UploadFile = File(...),
@@ -128,145 +149,138 @@ async def audit_policy(
     profile_res = supabase.table("profiles").select("*").eq("id", user.id).execute()
     if not profile_res.data:
         raise HTTPException(status_code=403, detail="Account not found. Contact Administrator.")
-    
+
     profile = profile_res.data[0]
-    
+    is_admin = profile.get("role") == "admin"
+
     if profile.get("is_locked"):
         raise HTTPException(status_code=403, detail="Account Locked. Contact Administrator.")
-    
+
     if profile.get("is_deleted"):
         raise HTTPException(status_code=403, detail="Account not found. Contact Administrator.")
 
-    today_str = datetime.utcnow().date().isoformat()
-    logs_res = supabase.table("api_logs").select("id").eq("user_id", user.id).gte("created_at", today_str).execute()
-    
-    usage_count = len(logs_res.data) if logs_res.data else 0
-    daily_limit = profile.get("daily_audit_limit", 3)
-    
-    if usage_count >= daily_limit:
-        raise HTTPException(status_code=403, detail="Daily limit reached. Please contact Suhasa to increase your quota.")
+    # Admins are exempt from daily rate limits
+    if not is_admin:
+        today_str = datetime.utcnow().date().isoformat()
+        logs_res = supabase.table("api_logs").select("id").eq("user_id", user.id).gte("created_at", today_str).execute()
+        usage_count = len(logs_res.data) if logs_res.data else 0
+        daily_limit = profile.get("daily_audit_limit", 3)
+        if usage_count >= daily_limit:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Daily audit limit reached ({usage_count}/{daily_limit}). Contact your administrator to increase your quota."
+            )
 
-    if not file.filename.endswith('.pdf'):
-        raise HTTPException(status_code=400, detail="Only PDF files are supported.")
-        
+    if not file.filename.lower().endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported. Please upload a .pdf file.")
+
     try:
         # 1. Convert PDF to text
         file_bytes = await file.read()
-        policy_text = extract_and_clean_text(file_bytes)
-        
-        if not policy_text:
-            raise HTTPException(status_code=400, detail="Could not extract text from the PDF.")
-            
-        # 2. Generate Embedding for the policy text
-        # If the policy is very long, we might just embed the first chunk or create a summary, 
-        # but for this requirement we embed the whole text or a representative chunk.
-        # Truncating to ~5000 characters for embedding to avoid limits
-        truncated_text = policy_text[:5000]
+        if len(file_bytes) > 20 * 1024 * 1024:  # 20MB guard
+            raise HTTPException(status_code=400, detail="File too large. Maximum PDF size is 20MB.")
+
+        try:
+            policy_text = extract_and_clean_text(file_bytes)
+        except Exception as pdf_err:
+            print(f"PDF extraction error: {pdf_err}")
+            raise HTTPException(status_code=400, detail="Could not read the PDF. The file may be corrupted, password-protected, or image-only (scanned). Please try a text-based PDF.")
+
+        if not policy_text or len(policy_text.strip()) < 50:
+            raise HTTPException(status_code=400, detail="Could not extract sufficient text from the PDF. It may be a scanned/image-based document. Please use a text-based PDF.")
+
+        # 2. Generate Embedding — truncate to ~8000 chars (covers most policies without hitting limits)
+        truncated_text = policy_text[:8000]
         query_embedding = generate_embedding(truncated_text)
-        
-        # 3. Vector Similarity Search
-        # Note: This requires a Postgres RPC function named `match_labour_laws` to be created in Supabase.
-        # See Supabase pgvector documentation for the SQL to create this function.
-        similar_docs = supabase.rpc(
-            "match_labour_laws", 
-            {
-                "query_embedding": query_embedding, 
-                "match_threshold": 0.5, 
-                "match_count": 5
-            }
-        ).execute()
-        
-        context_texts = [doc['content'] for doc in similar_docs.data] if similar_docs.data else []
-        legal_context = "\n\n---\n\n".join(context_texts)
-        
+
+        # 3. Vector Similarity Search — fault-tolerant; falls back to general review if RPC unavailable
+        legal_context = ""
+        try:
+            similar_docs = supabase.rpc(
+                "match_labour_laws",
+                {
+                    "query_embedding": query_embedding,
+                    "match_threshold": 0.4,
+                    "match_count": 3  # Reduced from 6 — each chunk is ~3000 chars; 3 = ~9000 chars total
+                }
+            ).execute()
+            # Truncate each chunk to 800 chars to cap context tokens
+            context_texts = [doc['content'][:800] for doc in similar_docs.data] if similar_docs.data else []
+            legal_context = "\n\n---\n\n".join(context_texts)
+        except Exception as rpc_err:
+            print(f"Vector search unavailable (RPC error): {rpc_err}. Proceeding with general review.")
+
         if not legal_context:
-            legal_context = "No relevant legal context found in the database. Provide general review based on typical labour laws."
+            legal_context = "No specific legal context found in the knowledge base. Apply your expertise on the 4 Indian Labour Codes: Code on Wages 2019, Industrial Relations Code 2020, Code on Social Security 2020, and Occupational Safety Health and Working Conditions Code 2020."
 
         # 4. Generate Analysis with Selected Model
-        system_instructions = "You are an expert Indian Labour Law Compliance Auditor specializing in the 4 new Labour Codes (2020-2025). Review the Following Employee Policy against the provided Legal Context."
-        
+        system_instructions = """You are an expert Indian Labour Law Compliance Auditor specializing in the 4 new Labour Codes enacted in 2019-2020 (in effect from 2025):
+1. Code on Wages, 2019
+2. Industrial Relations Code, 2020
+3. Code on Social Security, 2020
+4. Occupational Safety, Health and Working Conditions Code, 2020
+
+Review the provided Employee Policy and identify specific compliance gaps or satisfied requirements. Be precise — cite specific sections/chapters of the codes."""
+
         prompt = f"""
 LEGAL CONTEXT (Relevant Sections of Indian Labour Codes):
 {legal_context}
 
-EMPLOYEE POLICY:
-{policy_text}
+EMPLOYEE POLICY TO AUDIT:
+{policy_text[:6000]}
 
-Analyze the policy for compliance with the legal context. For each finding, cite the specific Labour Code section violated or satisfied.
+Analyze the policy for compliance with the Indian Labour Codes above. Identify specific gaps, violations, or well-compliant clauses. Cite the relevant Code and section for each finding.
 
-Provide a strict JSON response in the following schema exactly (no markdown formatting, just raw JSON):
+Return ONLY a raw JSON object (no markdown, no code fences) in this exact schema:
 {{
-    "compliance_score": <number between 0 and 100, where 100 means FULLY COMPLIANT and 0 means CRITICALLY NON-COMPLIANT>,
+    "compliance_score": <integer 0-100, where 100=fully compliant, 0=critically non-compliant>,
     "findings": [
-        "<finding 1: describe the specific gap or compliance issue with the relevant law section>",
-        "<finding 2>",
-        "<finding 3>"
+        "<Finding 1: specific issue or compliance with law section reference>",
+        "<Finding 2>",
+        "<Finding 3>",
+        "<Finding 4>",
+        "<Finding 5>"
     ]
 }}
 """
         final_provider = "google"
-        final_model = "gemini-1.5-flash"
+        final_model = PRIMARY_MODEL
         findings = []
         comp_score = 50
         p_tokens, c_tokens, t_tokens = 0, 0, 0
 
-        # Model Routing Logic
+        # Gemini 2.5 Flash — primary model, with automatic fallback to 1.5 Flash
         try:
-            if model_id == "claude-3-5-sonnet" and anthropic_client:
-                final_provider = "anthropic"
-                final_model = "claude-3-5-sonnet-20241022"
-                response = anthropic_client.messages.create(
-                    model=final_model,
-                    max_tokens=2048,
-                    system=system_instructions,
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                response_text = response.content[0].text
-                p_tokens = response.usage.input_tokens
-                c_tokens = response.usage.output_tokens
-                t_tokens = p_tokens + c_tokens
-            elif model_id == "gpt-4o" and openai_client:
-                final_provider = "openai"
-                final_model = "gpt-4o"
-                response = openai_client.chat.completions.create(
-                    model=final_model,
-                    messages=[
-                        {"role": "system", "content": system_instructions},
-                        {"role": "user", "content": prompt}
-                    ],
-                    response_format={ "type": "json_object" }
-                )
-                response_text = response.choices[0].message.content
-                p_tokens = response.usage.prompt_tokens
-                c_tokens = response.usage.completion_tokens
-                t_tokens = response.usage.total_tokens
-            else:
-                # Default: Gemini
-                final_provider = "google"
-                final_model = "gemini-1.5-flash"
-                response = genai_client.models.generate_content(
-                    model=final_model,
-                    contents=system_instructions + "\n\n" + prompt,
-                )
-                response_text = response.text
-                if response.usage_metadata:
-                    p_tokens = response.usage_metadata.prompt_token_count
-                    c_tokens = response.usage_metadata.candidates_token_count
-                    t_tokens = response.usage_metadata.total_token_count
-        except Exception as ai_err:
-            print(f"Provider error ({model_id}): {ai_err}. Falling back to Gemini Flash.")
-            # Final Fallback to Gemini Flash if selected provider fails
-            final_provider = "google"
-            final_model = "gemini-1.5-flash"
-            response = genai_client.models.generate_content(
-                model=final_model,
+            response = gemini.models.generate_content(
+                model=PRIMARY_MODEL,
                 contents=system_instructions + "\n\n" + prompt,
             )
             response_text = response.text
             if response.usage_metadata:
-                p_tokens = response.usage_metadata.prompt_token_count
-                c_tokens = response.usage_metadata.candidates_token_count
-                t_tokens = response.usage_metadata.total_token_count
+                p_tokens = response.usage_metadata.prompt_token_count or 0
+                c_tokens = response.usage_metadata.candidates_token_count or 0
+                t_tokens = response.usage_metadata.total_token_count or 0
+        except Exception as ai_err:
+            err_str = str(ai_err)
+            print(f"Gemini 2.5 Flash error: {ai_err}")
+            # If rate-limited (429), surface a clear message instead of silently falling back
+            if "429" in err_str or "quota" in err_str.lower() or "rate" in err_str.lower():
+                raise HTTPException(
+                    status_code=429,
+                    detail="Gemini API rate limit reached. The system processes a limited number of audits per minute. Please wait 60 seconds and try again."
+                )
+            # For other errors, fall back to Gemini 1.5 Flash
+            print(f"Falling back to {FALLBACK_MODEL}")
+            final_model = FALLBACK_MODEL
+            response = gemini.models.generate_content(
+                model=FALLBACK_MODEL,
+                contents=system_instructions + "\n\n" + prompt,
+            )
+            response_text = response.text
+            if response.usage_metadata:
+                p_tokens = response.usage_metadata.prompt_token_count or 0
+                c_tokens = response.usage_metadata.candidates_token_count or 0
+                t_tokens = response.usage_metadata.total_token_count or 0
         
         response_text = response_text.strip()
         if response_text.startswith("```json"):
@@ -388,30 +402,116 @@ async def reset_user_password(
         print(f"Password reset error: {e}")
         raise HTTPException(status_code=500, detail="Error resetting password.")
 
-@app.get("/admin/stats", response_model=AdminStatsResponse)
+@app.post("/admin/ingest-md")
+async def ingest_markdown(
+    file: UploadFile = File(...),
+    admin_user = Depends(get_current_user)
+):
+    """
+    Ingest a Markdown (.md) file into the pgvector knowledge base.
+    Chunks the text into ~500-word segments, embeds each with Gemini, and upserts to 'labour_laws'.
+    """
+    t0 = time.time()
+    # 1. Verify admin
+    profile_res = supabase.table("profiles").select("role").eq("id", admin_user.id).single().execute()
+    if not profile_res.data or profile_res.data.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required.")
+
+    # 2. Validate file type
+    if not (file.filename.endswith('.md') or 'markdown' in (file.content_type or '')):
+        raise HTTPException(status_code=400, detail="Only Markdown (.md) files are supported.")
+
+    try:
+        raw_bytes = await file.read()
+        if len(raw_bytes) > 5 * 1024 * 1024:  # 5MB limit
+            raise HTTPException(status_code=400, detail="File too large. Maximum size is 5MB.")
+
+        text = raw_bytes.decode('utf-8', errors='replace')
+        # Clean up excessive whitespace but preserve paragraph structure
+        text = re.sub(r'\n{3,}', '\n\n', text).strip()
+
+        # 3. Split into ~500-word chunks (roughly 3000 chars) with overlap
+        chunk_size = 3000
+        overlap = 300
+        chunks = []
+        start = 0
+        while start < len(text):
+            end = min(start + chunk_size, len(text))
+            # Try to break at a paragraph boundary
+            if end < len(text):
+                last_para = text.rfind('\n\n', start, end)
+                if last_para > start + overlap:
+                    end = last_para
+            chunk = text[start:end].strip()
+            if chunk:
+                chunks.append(chunk)
+            start = end - overlap if end < len(text) else len(text)
+
+        if not chunks:
+            raise HTTPException(status_code=400, detail="No content found in the file.")
+
+        # 4. Embed each chunk via the new google-genai SDK
+        # Note: new SDK does not support batch embedding in a single call like the old SDK did;
+        # we embed in small batches to stay within Vercel's 60s timeout
+        try:
+            embeddings = []
+            for chunk in chunks:
+                embed_result = gemini.models.embed_content(
+                    model="gemini-embedding-001",
+                    contents=chunk,
+                    config=genai_types.EmbedContentConfig(output_dimensionality=768)
+                )
+                embeddings.append(list(embed_result.embeddings[0].values))
+        except Exception as e:
+            print(f"Batch embedding failed: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to generate embeddings from Gemini API: {str(e)}")
+
+        # 5. Fast Batch Insert to Supabase
+        ingested = 0
+        rows_to_insert = [{"content": chunk, "embedding": emb} for chunk, emb in zip(chunks, embeddings)]
+        
+        # Insert in chunks of 50 to avoid payload size limits to Postgres
+        for i in range(0, len(rows_to_insert), 50):
+            batch = rows_to_insert[i:i+50]
+            try:
+                supabase.table("labour_laws").insert(batch).execute()
+                ingested += len(batch)
+            except Exception as e:
+                print(f"Failed to insert batch {i}-{i+50}: {e}")
+
+        # Final record keeping
+        response_time_ms = int((time.time() - t0) * 1000)
+        return {
+            "success": True,
+            "filename": file.filename,
+            "chunks_ingested": ingested,
+            "total_chunks": len(chunks),
+            "message": f"Successfully ingested {ingested}/{len(chunks)} chunks from '{file.filename}' into the knowledge base."
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Ingest error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to ingest document.")
+
+
+@app.get("/admin/stats")
 async def get_admin_stats(user = Depends(get_current_user)):
     # 1. Verify user is admin
     profile_res = supabase.table("profiles").select("role").eq("id", user.id).single().execute()
     if not profile_res.data or profile_res.data.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
 
-    # 2. Check provider connectivity
-    key_status = {
-        "google": "Active" if os.environ.get("GEMINI_API_KEY") else "Inactive",
-        "anthropic": "Active" if os.environ.get("ANTHROPIC_API_KEY") else "Inactive",
-        "openai": "Active" if os.environ.get("OPENAI_API_KEY") else "Inactive"
-    }
-
-    # 3. Aggregate 60s logs
+    # 2. Aggregate last-60s logs for Gemini models
     from datetime import timedelta
     sixty_seconds_ago = (datetime.utcnow() - timedelta(seconds=60)).isoformat()
     logs_res = supabase.table("api_logs").select("model_id, total_tokens").gte("created_at", sixty_seconds_ago).execute()
     logs = logs_res.data if logs_res.data else []
 
     models_to_track = [
-        {"id": "gemini-1.5-flash", "provider": "google"},
-        {"id": "claude-3-5-sonnet", "provider": "anthropic"},
-        {"id": "gpt-4o", "provider": "openai"}
+        {"id": PRIMARY_MODEL, "provider": "google"},
+        {"id": FALLBACK_MODEL, "provider": "google"},
     ]
 
     stats = []
@@ -419,13 +519,12 @@ async def get_admin_stats(user = Depends(get_current_user)):
         model_logs = [l for l in logs if l.get("model_id") == m["id"]]
         rpm = len(model_logs)
         tpm = sum(l.get("total_tokens", 0) for l in model_logs)
-        
-        stats.append(ModelStat(
-            model_id=m["id"],
-            provider=m["provider"],
-            status=key_status.get(m["provider"], "Inactive"),
-            rpm=rpm,
-            tpm=tpm
-        ))
+        stats.append({
+            "model_id": m["id"],
+            "provider": m["provider"],
+            "status": "Active" if GEMINI_API_KEY else "Inactive",
+            "rpm": rpm,
+            "tpm": tpm
+        })
 
-    return AdminStatsResponse(models=stats)
+    return {"models": stats}

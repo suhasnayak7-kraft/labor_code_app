@@ -2,8 +2,6 @@ fastapi
 uvicorn
 supabase
 google-genai
-anthropic
-openai
 pypdf
 python-multipart
 python-dotenv

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { UploadCloud, ShieldCheck, FileText, AlertTriangle, Zap, CheckCircle2, LayoutDashboard, Activity, Download } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import { Button } from './components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card';
 import { Progress } from './components/ui/progress';
@@ -14,6 +14,8 @@ import { RequestAccess } from './RequestAccess';
 import { CheckStatus } from './CheckStatus';
 import { AdminDashboard } from './AdminDashboard';
 import { toast } from 'sonner';
+import { TextLoop } from './components/ui/text-loop';
+import ShimmerText from './components/kokonutui/shimmer-text';
 
 const SCAN_MESSAGES = [
   "Extracting Policy Text...",
@@ -29,13 +31,14 @@ export default function App() {
   const [profile, setProfile] = useState<any>(null);
   const [currentTab, setCurrentTab] = useState<'audit' | 'usage' | 'admin'>('audit');
   const [authView, setAuthView] = useState<'login' | 'request'>('login');
+  const [activeTool, setActiveTool] = useState<string | null>(null);
 
   const [file, setFile] = useState<File | null>(null);
   const [isAuditing, setIsAuditing] = useState(false);
   const [result, setResult] = useState<{ compliance_score: number; findings: string[] } | null>(null);
   const [totalTokens, setTotalTokens] = useState<number>(0);
-  const [scanMessage, setScanMessage] = useState(SCAN_MESSAGES[0]);
   const [scanProgress, setScanProgress] = useState(0);
+  const [auditStatus, setAuditStatus] = useState<{ usage_today: number; daily_limit: number; remaining: number; is_admin: boolean } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -81,43 +84,73 @@ export default function App() {
     }
   };
 
+  const fetchAuditStatus = async () => {
+    if (!session?.access_token) return;
+    try {
+      const response = await fetch(`${API_URL}/audit/status`, {
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setAuditStatus(data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch audit status", error);
+    }
+  };
+
   useEffect(() => {
     fetchTotalTokens();
+    fetchAuditStatus();
   }, [currentTab]); // Refresh when tab changes
+
+  const MAX_FILE_SIZE = 4.5 * 1024 * 1024; // 4.5MB absolute Vercel Serverless payload limit
 
   const handleFileDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const droppedFile = e.dataTransfer.files[0];
-      if (droppedFile.type === 'application/pdf') {
-        setFile(droppedFile);
-      } else {
+      if (droppedFile.type !== 'application/pdf') {
         alert("Please upload a PDF file.");
+        return;
       }
+      if (droppedFile.size > MAX_FILE_SIZE) {
+        alert("File is too large. Vercel allows a maximum of 4.5MB for free tier serverless endpoints. Please compress your PDF.");
+        return;
+      }
+      setFile(droppedFile);
     }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0]);
+      const selectedFile = e.target.files[0];
+      if (selectedFile.size > MAX_FILE_SIZE) {
+        alert("File is too large. Vercel allows a maximum of 4.5MB for free tier serverless endpoints. Please compress your PDF.");
+        // Clear the input so they can select again
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        return;
+      }
+      setFile(selectedFile);
     }
   };
 
   const getScoreColor = (score: number) => {
-    if (score >= 80) return 'text-emerald-600';
-    if (score >= 50) return 'text-yellow-600';
-    return 'text-red-600';
+    if (score >= 80) return 'text-[#606C5A]';
+    if (score >= 50) return 'text-[#A68B2C]';
+    return 'text-[#8B4A42]';
   };
 
   const getScoreBorderColor = (score: number) => {
-    if (score >= 80) return 'border-t-emerald-500';
-    if (score >= 50) return 'border-t-yellow-500';
-    return 'border-t-red-500';
+    if (score >= 80) return 'border-t-[#606C5A]';
+    if (score >= 50) return 'border-t-[#D4A827]';
+    return 'border-t-[#8B4A42]';
   };
 
   const getScoreLabel = (score: number) => {
-    if (score >= 80) return 'Compliant';
-    if (score >= 50) return 'Moderate Risk';
+    if (score >= 90) return 'Likely Compliant';
+    if (score >= 70) return 'Moderate Risk';
+    if (score >= 50) return 'Significant Gaps';
     return 'Critical Non-Compliance';
   };
 
@@ -202,7 +235,6 @@ export default function App() {
     setIsAuditing(true);
     setResult(null);
     setScanProgress(0);
-    setScanMessage(SCAN_MESSAGES[0]);
 
     // Simulate scanning progress UX
     let messageIndex = 0;
@@ -213,11 +245,11 @@ export default function App() {
       });
 
       messageIndex = (messageIndex + 1) % SCAN_MESSAGES.length;
-      setScanMessage(SCAN_MESSAGES[messageIndex]);
     }, 2000);
 
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('model_id', 'gemini-2.5-flash');
 
     try {
       const response = await fetch(`${API_URL}/audit`, {
@@ -228,25 +260,40 @@ export default function App() {
         body: formData,
       });
 
-      const data = await response.json();
+      // Safe parse — Vercel Gateway may return HTML or plain text on native crashes (like 4.5MB payload limit)
+      const ct = response.headers.get('content-type') || '';
+      let data: any = {};
+      if (ct.includes('application/json')) {
+        try {
+          data = await response.json();
+        } catch (err) {
+          data = { detail: "Server returned malformed JSON." };
+        }
+      } else {
+        const text = await response.text();
+        data = { detail: text.substring(0, 100) }; // Capture Vercel's plain text error string
+      }
 
       if (!response.ok) {
         if (response.status === 403) {
-          throw new Error(data.detail || "Access Denied.");
+          throw new Error(data.detail || "Access Denied. You may have reached your daily limit.");
         }
-        throw new Error(data.detail || 'Audit failed. Ensure the backend is running.');
+        if (response.status === 400 || response.status === 413) {
+          throw new Error(data.detail || "Invalid file or request (File must be < 4.5MB).");
+        }
+        throw new Error(`Audit failed on server: ${data.detail || 'Service unavailable.'}`);
       }
 
       // Snap to 100% and clear interval
       clearInterval(progressInterval);
       setScanProgress(100);
-      setScanMessage("Audit Complete!");
 
       // Brief delay to show 100% before transitioning
       setTimeout(async () => {
         setResult(data);
         setIsAuditing(false);
         await fetchTotalTokens();
+        await fetchAuditStatus();
       }, 800);
 
     } catch (error: any) {
@@ -259,10 +306,10 @@ export default function App() {
 
   if (!session) {
     return (
-      <div className="min-h-screen bg-zinc-50 relative">
+      <div className="min-h-screen bg-[#F3F3F2] relative">
         <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
           <CheckStatus />
-          <Button variant="outline" onClick={() => setAuthView(authView === 'login' ? 'request' : 'login')} className="bg-white/50 backdrop-blur-sm shadow-sm">
+          <Button variant="outline" onClick={() => setAuthView(authView === 'login' ? 'request' : 'login')} className="bg-[#FFFFFC] shadow-sm border-[#E6E4E0]">
             {authView === 'login' ? 'Request Access' : 'Sign In'}
           </Button>
         </div>
@@ -273,14 +320,14 @@ export default function App() {
 
   if (profile?.is_deleted) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-zinc-50 selection:bg-zinc-200 p-4">
-        <Card className="max-w-md w-full border-red-200 shadow-xl">
+      <div className="min-h-screen flex items-center justify-center bg-[#F3F3F2] p-4">
+        <Card className="max-w-md w-full border-[#E6E4E0] shadow-xl bg-[#FFFFFC]">
           <CardContent className="pt-10 pb-8 text-center space-y-4">
-            <div className="mx-auto bg-zinc-100 w-16 h-16 rounded-full flex items-center justify-center mb-4">
-              <AlertTriangle className="w-8 h-8 text-zinc-600" />
+            <div className="mx-auto bg-[#F5ECEA] w-16 h-16 rounded-full flex items-center justify-center mb-4">
+              <AlertTriangle className="w-8 h-8 text-[#8B4A42]" />
             </div>
-            <h1 className="text-2xl font-bold tracking-tight text-zinc-900">Access Revoked</h1>
-            <p className="text-zinc-500">
+            <h1 className="text-2xl font-bold tracking-tight text-[#2C2A28]">Access Revoked</h1>
+            <p className="text-[#8F837A]">
               Your organization's access to the Labour Code Auditor has been removed.
             </p>
             <div className="pt-4">
@@ -294,17 +341,17 @@ export default function App() {
 
   if (profile?.is_locked) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-zinc-50 selection:bg-zinc-200 p-4">
-        <Card className="max-w-md w-full border-red-200 shadow-xl">
+      <div className="min-h-screen flex items-center justify-center bg-[#F3F3F2] p-4">
+        <Card className="max-w-md w-full border-[#E6E4E0] shadow-xl bg-[#FFFFFC]">
           <CardContent className="pt-10 pb-8 text-center space-y-4">
-            <div className="mx-auto bg-red-100 w-16 h-16 rounded-full flex items-center justify-center mb-4">
-              <AlertTriangle className="w-8 h-8 text-red-600" />
+            <div className="mx-auto bg-[#F5ECEA] w-16 h-16 rounded-full flex items-center justify-center mb-4">
+              <AlertTriangle className="w-8 h-8 text-[#8B4A42]" />
             </div>
-            <h1 className="text-2xl font-bold tracking-tight text-zinc-900">Account Locked</h1>
-            <p className="text-zinc-500">
+            <h1 className="text-2xl font-bold tracking-tight text-[#2C2A28]">Account Locked</h1>
+            <p className="text-[#8F837A]">
               Your organization's access to the Labour Code Auditor has been temporarily suspended.
             </p>
-            <p className="text-sm text-zinc-400">Please contact your system administrator.</p>
+            <p className="text-sm text-[#C0B4A8]">Please contact your system administrator.</p>
             <div className="pt-4">
               <Button variant="outline" onClick={() => supabase.auth.signOut()} className="w-full">Sign Out</Button>
             </div>
@@ -315,12 +362,12 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-50 text-zinc-900 font-sans selection:bg-zinc-200">
+    <div className="min-h-screen bg-[#F3F3F2] text-[#2C2A28] font-sans">
       {/* Navigation Bar */}
-      <nav className="sticky top-0 z-50 w-full border-b border-zinc-200 bg-white/80 backdrop-blur-md">
+      <nav className="sticky top-0 z-50 w-full border-b border-[#E6E4E0] bg-[#FFFFFC]">
         <div className="container mx-auto flex h-16 items-center justify-between px-4 md:px-6">
-          <div className="flex items-center gap-2 font-bold text-xl tracking-tight text-zinc-900">
-            <ShieldCheck className="w-6 h-6 text-zinc-900" />
+          <div className="flex items-center gap-2 font-bold text-xl tracking-tight text-[#2C2A28]">
+            <ShieldCheck className="w-6 h-6 text-[#606C5A]" />
             AuditAI
           </div>
 
@@ -328,14 +375,14 @@ export default function App() {
             <div className="hidden md:flex items-center gap-4 text-sm font-medium">
               <button
                 onClick={() => setCurrentTab('audit')}
-                className={`flex items-center gap-2 transition-colors ${currentTab === 'audit' ? 'text-zinc-900' : 'text-zinc-500 hover:text-zinc-900'}`}
+                className={`flex items-center gap-2 transition-colors ${currentTab === 'audit' ? 'text-[#2C2A28]' : 'text-[#8F837A] hover:text-[#2C2A28]'}`}
               >
                 <LayoutDashboard className="w-4 h-4" />
                 Auditor
               </button>
               <button
                 onClick={() => setCurrentTab('usage')}
-                className={`flex items-center gap-2 transition-colors ${currentTab === 'usage' ? 'text-zinc-900' : 'text-zinc-500 hover:text-zinc-900'}`}
+                className={`flex items-center gap-2 transition-colors ${currentTab === 'usage' ? 'text-[#2C2A28]' : 'text-[#8F837A] hover:text-[#2C2A28]'}`}
               >
                 <Activity className="w-4 h-4" />
                 Audit Logs
@@ -343,7 +390,7 @@ export default function App() {
               {profile?.role === 'admin' && (
                 <button
                   onClick={() => setCurrentTab('admin')}
-                  className={`flex items-center gap-2 transition-colors ${currentTab === 'admin' ? 'text-zinc-900' : 'text-zinc-500 hover:text-zinc-900'}`}
+                  className={`flex items-center gap-2 transition-colors ${currentTab === 'admin' ? 'text-[#2C2A28]' : 'text-[#8F837A] hover:text-[#2C2A28]'}`}
                 >
                   <ShieldCheck className="w-4 h-4" />
                   Admin
@@ -362,7 +409,7 @@ export default function App() {
               </Badge>
             )}
 
-            <Button variant="ghost" size="sm" onClick={() => supabase.auth.signOut()} className="text-zinc-500 hover:text-zinc-900 transition-all hover:scale-[1.05] active:scale-[0.95]">
+            <Button variant="ghost" size="sm" onClick={() => supabase.auth.signOut()} className="text-[#8F837A] hover:text-[#2C2A28] transition-colors">
               Sign Out
             </Button>
           </div>
@@ -381,23 +428,59 @@ export default function App() {
             </div>
             <UsageDashboard token={session?.access_token} dailyLimit={profile?.daily_audit_limit} role={profile?.role} />
           </div>
+        ) : activeTool === null ? (
+          <div className="max-w-6xl mx-auto py-8 fade-in">
+            <div className="mb-10 text-center">
+              <h1 className="font-serif text-4xl text-[#2C2A28]">Compliance Hub</h1>
+              <p className="text-[#5E5E5E] mt-3 max-w-2xl mx-auto">
+                Select a tool to analyze your documents, calculate liabilities, and ensure complete compliance.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {/* Labour Code Auditor Card */}
+              <div
+                className="bg-[#FFFFFC] border border-[#E6E4E0] rounded-lg shadow-[0_1px_3px_rgba(95,87,80,0.07),0_1px_2px_rgba(95,87,80,0.04)] p-5 cursor-pointer flex flex-col items-start text-left h-full min-h-[220px] transition-colors duration-120 hover:border-[#C0B4A8] group"
+                onClick={() => setActiveTool('labor')}
+              >
+                <div className="w-10 h-10 rounded-full bg-[#ECF0E8] flex items-center justify-center mb-4">
+                  <FileText className="w-5 h-5 text-[#606C5A]" />
+                </div>
+                <span className="font-semibold text-[11px] uppercase tracking-[0.08em] text-[#606C5A] mb-2">LABOUR CODE</span>
+                <h3 className="font-serif text-[17px] text-[#2C2A28] mb-2">Labour Compliance Auditor</h3>
+                <p className="text-[13px] text-[#8F837A] mb-6 flex-grow">
+                  Check your policies against the 2025 Indian Labour Codes.
+                </p>
+                <span className="text-[13px] text-[#606C5A] font-medium flex items-center mt-auto group-hover:text-[#4F5A4A] transition-colors">
+                  Scan my policy <span className="ml-1">→</span>
+                </span>
+              </div>
+            </div>
+          </div>
         ) : (
-          <div className="max-w-4xl mx-auto align-top">
+          <div className="max-w-[800px] mx-auto bg-white p-8 md:p-12 rounded-lg shadow-[0_1px_3px_rgba(95,87,80,0.07)] border border-[#E6E4E0] my-4 fade-in">
+            <div className="mb-6 flex items-center text-[13px] text-[#8F837A]">
+              <button
+                onClick={() => setActiveTool(null)}
+                className="hover:text-[#2C2A28] transition-colors font-medium mr-2"
+              >
+                Hub
+              </button>
+              <span className="mr-2">→</span>
+              <span className="text-[#2C2A28] font-medium">Labour Code</span>
+            </div>
+
             <AnimatePresence mode="wait">
               {!isAuditing && !result && (
-                <motion.div
+                <div
                   key="upload"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
-                  transition={{ duration: 0.4 }}
-                  className="space-y-8"
+                  className="space-y-8 fade-in"
                 >
                   <div className="text-center space-y-3 mb-10">
-                    <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight lg:text-5xl">
-                      Labour Code Compliance Auditor
+                    <h1 className="font-serif text-4xl tracking-tight text-[#2C2A28]">
+                      Labour Code Auditor
                     </h1>
-                    <p className="text-lg text-zinc-500 max-w-2xl mx-auto">
+                    <p className="text-[14px] leading-[1.6] text-[#5E5E5E] max-w-2xl mx-auto">
                       Upload your Employee Policy or Code of Conduct to instantly identify compliance risks against the latest 2025 Labour Regulations.
                     </p>
                   </div>
@@ -418,21 +501,22 @@ export default function App() {
                           ref={fileInputRef}
                           onChange={handleFileChange}
                         />
-                        <div className="bg-zinc-100 p-4 rounded-full mb-4 group-hover:bg-zinc-200 transition-colors">
-                          <UploadCloud className="w-8 h-8 text-zinc-600" />
+                        <div className="bg-[#ECF0E8] p-4 rounded-full mb-4 transition-colors">
+                          <UploadCloud className="w-8 h-8 text-[#606C5A]" />
                         </div>
-                        <h3 className="text-lg font-semibold text-zinc-900 mb-1">
+                        <h3 className="text-lg font-semibold text-[#2C2A28] mb-1">
                           {file ? file.name : "Click or drag your PDF here"}
                         </h3>
                         <p className="text-sm text-zinc-500">
-                          {file ? `${(file.size / 1024 / 1024).toFixed(2)} MB • Ready to audit` : "Only PDF files are supported up to 10MB"}
+                          {file ? `${(file.size / 1024 / 1024).toFixed(2)} MB • Ready to audit` : "Only PDF files are supported up to 4.5MB"}
                         </p>
                       </div>
 
+
                       <Button
                         size="lg"
-                        className="mt-6 w-full max-w-sm font-medium transition-all hover:scale-[1.02] active:scale-[0.98] shadow-md hover:shadow-lg"
-                        disabled={!file}
+                        className="mt-4 w-full max-w-sm font-medium transition-colors shadow-md hover:shadow-lg"
+                        disabled={!file || (auditStatus !== null && !auditStatus.is_admin && auditStatus.remaining === 0)}
                         onClick={(e) => { e.stopPropagation(); handleAudit(); }}
                       >
                         <span className="flex items-center gap-2">
@@ -440,44 +524,50 @@ export default function App() {
                           Run Compliance Audit
                         </span>
                       </Button>
+
+                      {/* Remaining audits indicator */}
+                      {auditStatus && !auditStatus.is_admin && (
+                        <p className={`mt-2 text-xs ${auditStatus.remaining === 0 ? 'text-[#8B4A42]' : 'text-[#8F837A]'}`}>
+                          {auditStatus.remaining === 0
+                            ? 'Daily limit reached. Contact your administrator.'
+                            : `${auditStatus.remaining} audit${auditStatus.remaining !== 1 ? 's' : ''} remaining today (${auditStatus.usage_today}/${auditStatus.daily_limit} used)`}
+                        </p>
+                      )}
                     </CardContent>
                   </Card>
-                </motion.div>
+                </div>
               )}
 
-              {/* Cinematic Scanner */}
               {isAuditing && (
-                <motion.div
+                <div
                   key="scanning"
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 1.05 }}
-                  transition={{ duration: 0.5 }}
-                  className="flex flex-col items-center justify-center py-20 min-h-[50vh]"
+                  className="flex flex-col items-center justify-center py-20 min-h-[50vh] fade-in"
                 >
                   <div className="relative mb-8">
-                    <div className="absolute inset-0 bg-zinc-900 rounded-full animate-ping opacity-20 duration-1000" />
-                    <div className="bg-zinc-900 text-white p-6 rounded-full relative z-10 shadow-2xl">
+                    <div className="bg-[#606C5A] text-white p-6 rounded-full relative z-10 shadow-[0_1px_3px_rgba(95,87,80,0.07)]">
                       <ShieldCheck className="w-12 h-12" />
                     </div>
                   </div>
-                  <h2 className="text-2xl font-bold tracking-tight mb-2">Scanning Document...</h2>
-                  <p className="text-zinc-500 animate-pulse font-medium h-6">{scanMessage}</p>
+                  <h2 className="text-2xl font-bold tracking-tight mb-2 text-[#2C2A28]">Scanning Document...</h2>
+                  <div className="font-medium h-6 text-zinc-500 flex justify-center w-full">
+                    <TextLoop>
+                      <span>Extracting Policy Text...</span>
+                      <span>Consulting Indian Labour Codes...</span>
+                      <span>Identifying Risk Patterns...</span>
+                      <span>Finalizing Compliance Report...</span>
+                    </TextLoop>
+                  </div>
 
                   <div className="w-full max-w-md mt-8">
                     <Progress value={scanProgress} className="h-2 w-full transition-all duration-1000" />
                   </div>
-                </motion.div>
+                </div>
               )}
 
-              {/* Results Section */}
               {result && !isAuditing && (
-                <motion.div
+                <div
                   key="results"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5, delay: 0.2 }}
-                  className="space-y-6"
+                  className="space-y-6 fade-in"
                 >
                   <div className="flex items-center justify-between border-b pb-2">
                     <h2 className="text-2xl font-bold tracking-tight">Audit Results</h2>
@@ -496,7 +586,9 @@ export default function App() {
                     {/* Compliance Score Card */}
                     <Card className={`md:col-span-1 border-t-4 ${getScoreBorderColor(result.compliance_score)}`}>
                       <CardHeader>
-                        <CardTitle className="text-lg text-zinc-700">Compliance Score</CardTitle>
+                        <CardTitle className="text-lg text-zinc-700">
+                          <ShimmerText text="Compliance Score" className="p-0 justify-start !text-lg !font-semibold" />
+                        </CardTitle>
                         <CardDescription>100 = Fully compliant · 0 = Critical violations</CardDescription>
                       </CardHeader>
                       <CardContent className="flex flex-col items-center justify-center p-6 space-y-4">
@@ -516,42 +608,50 @@ export default function App() {
                     {/* Findings */}
                     <div className="md:col-span-2 space-y-4">
                       {result.compliance_score < 50 ? (
-                        <Alert variant="destructive" className="bg-red-50 text-red-900 border-red-200">
-                          <AlertTriangle className="h-4 w-4" />
-                          <AlertTitle>Immediate Action Required</AlertTitle>
-                          <AlertDescription>
+                        <Alert className="bg-[#F5ECEA] text-[#2C2A28] border-[#E8C4C0]">
+                          <AlertTriangle className="h-4 w-4 text-[#8B4A42]" />
+                          <AlertTitle className="text-[#8B4A42]">Immediate Action Required</AlertTitle>
+                          <AlertDescription className="text-[#5E5E5E]">
                             This policy has critical compliance violations. Legal review and corrective action needed immediately.
                           </AlertDescription>
                         </Alert>
-                      ) : result.compliance_score >= 80 ? (
-                        <Alert className="bg-emerald-50 text-emerald-900 border-emerald-200">
-                          <CheckCircle2 className="h-4 w-4" color="#059669" />
-                          <AlertTitle className="text-emerald-800">Strong Compliance</AlertTitle>
-                          <AlertDescription className="text-emerald-700">
+                      ) : result.compliance_score >= 70 ? (
+                        <Alert className="bg-[#ECF0E8] text-[#2C2A28] border-[#DCE4D5]">
+                          <CheckCircle2 className="h-4 w-4 text-[#606C5A]" />
+                          <AlertTitle className="text-[#606C5A]">Strong Compliance</AlertTitle>
+                          <AlertDescription className="text-[#5E5E5E]">
                             This policy is largely compliant with the Indian Labour Codes. Review any findings below for minor improvements.
                           </AlertDescription>
                         </Alert>
                       ) : (
-                        <Alert className="bg-yellow-50 text-yellow-900 border-yellow-200">
-                          <AlertTriangle className="h-4 w-4" color="#ca8a04" />
-                          <AlertTitle className="text-yellow-800">Moderate Compliance Gaps</AlertTitle>
-                          <AlertDescription className="text-yellow-700">
+                        <Alert className="bg-[#F8F0DE] text-[#2C2A28] border-[#E8D5A3]">
+                          <AlertTriangle className="h-4 w-4 text-[#A68B2C]" />
+                          <AlertTitle className="text-[#A68B2C]">Moderate Compliance Gaps</AlertTitle>
+                          <AlertDescription className="text-[#5E5E5E]">
                             Corrective action is recommended. Review the findings below and update the policy accordingly.
                           </AlertDescription>
                         </Alert>
                       )}
 
                       <div className="bg-white rounded-xl border overflow-hidden shadow-sm">
-                        <div className="bg-zinc-50 border-b px-4 py-3 font-semibold text-zinc-700 flex items-center gap-2">
-                          <FileText className="w-4 h-4" />
-                          Detailed Findings
+                        <div className="bg-[#F3F3F2] border-b border-[#E6E4E0] px-4 py-3 font-semibold text-[#5E5E5E] flex items-center justify-between gap-2">
+                          <span className="flex items-center gap-2">
+                            <FileText className="w-4 h-4" />
+                            Detailed Findings
+                          </span>
+                          <span className="flex items-center gap-2">
+                            <Badge variant="secondary" className="font-mono bg-zinc-200/50 text-zinc-600">
+                              {result.findings.length}
+                            </Badge>
+                            Issues
+                          </span>
                         </div>
                         <Accordion type="single" collapsible className="w-full px-4">
                           {result.findings.map((finding, index) => (
                             <AccordionItem key={index} value={`item-${index}`} className="last:border-b-0">
-                              <AccordionTrigger className="text-left font-medium text-sm hover:no-underline hover:text-blue-600 transition-colors">
+                              <AccordionTrigger className="text-left font-medium text-sm hover:no-underline hover:text-[#606C5A] transition-colors">
                                 <span className="flex items-start gap-3">
-                                  <span className="flex-shrink-0 bg-red-100 text-red-700 h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold mt-0.5">
+                                  <span className="flex-shrink-0 bg-[#F5ECEA] text-[#8B4A42] h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold mt-0.5">
                                     {index + 1}
                                   </span>
                                   <span className="leading-snug">
@@ -568,7 +668,20 @@ export default function App() {
                       </div>
                     </div>
                   </div>
-                </motion.div>
+
+                  {/* Door Navigation */}
+                  <div className="mt-12 pt-8 border-t border-[#E6E4E0]">
+                    <button
+                      className="text-left group w-full"
+                      onClick={() => toast("Wage Simulator is coming in Tier 2.", { icon: "🚧" })}
+                    >
+                      <div className="text-[#5E5E5E] text-[13px] mb-1">Your wage structure may be contributing to this.</div>
+                      <div className="text-[#606C5A] font-medium group-hover:text-[#4F5A4A] transition-colors">
+                        Run a Wage Simulation to check. →
+                      </div>
+                    </button>
+                  </div>
+                </div>
               )}
             </AnimatePresence>
           </div>
