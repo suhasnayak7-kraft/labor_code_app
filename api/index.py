@@ -1,22 +1,19 @@
 import sys
 import os
+import traceback
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
 # Add backend directory to path so imports work
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../backend'))
 
-import traceback
+# Initialize app at the top level so Vercel's AST parser detects it
+app = FastAPI()
 
 try:
-    from fastapi import FastAPI
     from main import app as backend_app
-
-    app = FastAPI()
     app.mount("/api", backend_app)
 except Exception as e:
-    from fastapi import FastAPI, Request
-    from fastapi.responses import JSONResponse
-    
-    app = FastAPI()
     err_str = traceback.format_exc()
     
     @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"])
