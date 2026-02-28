@@ -325,7 +325,7 @@ Return ONLY a raw JSON object (no markdown, no code fences) in this exact schema
             "completion_tokens": c_tokens,
             "total_tokens": t_tokens,
             "filename": file.filename,
-            "risk_score": 100 - comp_score,
+            "compliance_score": comp_score,
             "user_id": user.id,
             "findings": findings,
             "model_id": final_model,
