@@ -99,9 +99,7 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
     const [loading, setLoading] = useState(true);
     const [expandedUser, setExpandedUser] = useState<string | null>(null);
     const [healthData, setHealthData] = useState<ModelHealth[]>([
-        { model_id: 'gemini-1.5-flash', provider: 'google', rpm: 0, tpm: 0, rpmLimit: 15, tpmLimit: 1000000, isActive: true },
-        { model_id: 'claude-3-5-sonnet', provider: 'anthropic', rpm: 0, tpm: 0, rpmLimit: 5, tpmLimit: 40000, isActive: false },
-        { model_id: 'gpt-4o', provider: 'openai', rpm: 0, tpm: 0, rpmLimit: 3, tpmLimit: 30000, isActive: false }
+        { model_id: 'gemini-2.5-flash', provider: 'google', rpm: 0, tpm: 0, rpmLimit: 15, tpmLimit: 1000000, isActive: true }
     ]);
     const [toolConfigs, setToolConfigs] = useState<ToolConfig[]>([]);
     const [isSavingTool, setIsSavingTool] = useState<string | null>(null);
@@ -335,9 +333,7 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
 
         // Tool usage breakdown by model
         const toolUsage = [
-            { model: 'gemini-1.5-flash', label: 'Gemini Flash', count: userLogs.filter(l => l.model_id?.includes('gemini')).length, tokens: userLogs.filter(l => l.model_id?.includes('gemini')).reduce((s, l) => s + (l.total_tokens || 0), 0) },
-            { model: 'claude-3-5-sonnet', label: 'Claude Sonnet', count: userLogs.filter(l => l.model_id?.includes('claude')).length, tokens: userLogs.filter(l => l.model_id?.includes('claude')).reduce((s, l) => s + (l.total_tokens || 0), 0) },
-            { model: 'gpt-4o', label: 'GPT-4o', count: userLogs.filter(l => l.model_id?.includes('gpt')).length, tokens: userLogs.filter(l => l.model_id?.includes('gpt')).reduce((s, l) => s + (l.total_tokens || 0), 0) },
+            { model: 'gemini-2.5-flash', label: 'Gemini Flash 2.5', count: userLogs.filter(l => l.model_id?.includes('gemini')).length, tokens: userLogs.filter(l => l.model_id?.includes('gemini')).reduce((s, l) => s + (l.total_tokens || 0), 0) },
         ];
 
         return (
