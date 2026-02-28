@@ -200,10 +200,15 @@ async def audit_policy(
                 "match_labour_laws",
                 {
                     "query_embedding": query_embedding,
-                    "match_threshold": 0.4,
+                    "match_threshold": 0.5,
                     "match_count": 3  # Reduced from 6 — each chunk is ~3000 chars; 3 = ~9000 chars total
                 }
             ).execute()
+            
+            # Sort results deterministically by ID to ensure consistent ordering
+            if similar_docs.data:
+                similar_docs.data = sorted(similar_docs.data, key=lambda x: str(x.get('id', '')))
+                
             # Truncate each chunk to 800 chars to cap context tokens
             context_texts = [doc['content'][:800] for doc in similar_docs.data] if similar_docs.data else []
             legal_context = "\n\n---\n\n".join(context_texts)
@@ -256,6 +261,9 @@ Return ONLY a raw JSON object (no markdown, no code fences) in this exact schema
                 contents=system_instructions + "\n\n" + prompt,
                 config=genai_types.GenerateContentConfig(
                     temperature=0.0,
+                    top_p=0.95,
+                    top_k=40,
+                    seed=42,
                     response_mime_type="application/json",
                 )
             )
@@ -281,6 +289,9 @@ Return ONLY a raw JSON object (no markdown, no code fences) in this exact schema
                 contents=system_instructions + "\n\n" + prompt,
                 config=genai_types.GenerateContentConfig(
                     temperature=0.0,
+                    top_p=0.95,
+                    top_k=40,
+                    seed=42,
                     response_mime_type="application/json",
                 )
             )
