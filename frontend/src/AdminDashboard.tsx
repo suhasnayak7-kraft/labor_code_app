@@ -388,53 +388,7 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                     </div>
                 </div>
 
-                {/* Audit Trail Table */}
-                <div className="mt-8 space-y-3">
-                    <h4 className="text-[10px] font-bold uppercase tracking-wider text-[#8F837A] px-1 flex items-center gap-2">
-                        <Activity size={14} className="text-[#606C5A]" /> Recent Audit Trail
-                    </h4>
-                    <div className="bg-white rounded-lg border border-zinc-200 overflow-hidden">
-                        <Table>
-                            <TableHeader className="bg-zinc-50/50">
-                                <TableRow>
-                                    <TableHead className="text-[10px] h-8 uppercase">Timestamp</TableHead>
-                                    <TableHead className="text-[10px] h-8 uppercase">Model</TableHead>
-                                    <TableHead className="text-[10px] h-8 uppercase text-right">Tokens</TableHead>
-                                    <TableHead className="text-[10px] h-8 uppercase text-right">Latency</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {userLogs.length === 0 ? (
-                                    <TableRow>
-                                        <TableCell colSpan={4} className="text-center py-4 text-xs text-zinc-400 italic">No audits logged for this profile.</TableCell>
-                                    </TableRow>
-                                ) : (
-                                    userLogs.slice(0, 5).map(log => (
-                                        <TableRow key={log.id} className="hover:bg-zinc-50/50">
-                                            <TableCell className="text-[10px] font-mono text-zinc-500 py-2">
-                                                {new Date(log.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
-                                            </TableCell>
-                                            <TableCell className="py-2">
-                                                <Badge variant="outline" className="text-[9px] h-4 px-1.5 font-mono bg-zinc-50">
-                                                    {log.model_id}
-                                                </Badge>
-                                            </TableCell>
-                                            <TableCell className="text-right text-[10px] font-mono text-zinc-600 py-2">
-                                                {(log.total_tokens || 0).toLocaleString()}
-                                            </TableCell>
-                                            <TableCell className="text-right text-[10px] font-mono text-zinc-600 py-2">
-                                                {log.response_time_ms ? `${log.response_time_ms}ms` : '-'}
-                                            </TableCell>
-                                        </TableRow>
-                                    ))
-                                )}
-                            </TableBody>
-                        </Table>
-                    </div>
-                    {userLogs.length > 5 && (
-                        <div className="text-[10px] text-zinc-400 italic text-center">Showing last 5 audits. View full history in Audit Logs.</div>
-                    )}
-                </div>
+                {/* Audit Trail Table Removed - Admins only see aggregated counts, not individual logs */}
             </div>
         );
     };
@@ -718,33 +672,6 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                             </Card>
                         </div>
 
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-                            <Card className="bg-[#FFFFFC] border-[#E6E4E0] shadow-[0_1px_3px_rgba(95,87,80,0.07)]">
-                                <CardHeader>
-                                    <CardTitle className="text-[15px] font-medium text-[#2C2A28]">Recent Audit Activity</CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="space-y-4">
-                                        {auditLogs.slice(0, 5).map(log => {
-                                            const user = profiles.find(p => p.id === log.user_id);
-                                            return (
-                                                <div key={log.id} className="flex items-start justify-between border-b border-[#E6E4E0] pb-3 last:border-0 last:pb-0 hover:bg-[#F3F3F2]/50 p-2 -mx-2 rounded transition-colors">
-                                                    <div>
-                                                        <div className="text-[13px] font-medium text-[#2C2A28]">{user?.company_name || user?.email || 'Unknown User'}</div>
-                                                        <div className="text-[11px] text-[#8F837A] mt-0.5">{log.filename || 'Document Audit'}</div>
-                                                    </div>
-                                                    <div className="text-right">
-                                                        <div className="text-[11px] font-mono text-[#5E5E5E]">{(log.total_tokens || 0).toLocaleString()} tokens</div>
-                                                        <div className="text-[10px] text-[#C0B4A8] mt-1">{new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
-                                                    </div>
-                                                </div>
-                                            )
-                                        })}
-                                        {auditLogs.length === 0 && <div className="text-[13px] text-[#8F837A] italic">No recent activity.</div>}
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        </div>
                     </TabsContent>
 
                     {/* PLANS & TOOLS TAB */}

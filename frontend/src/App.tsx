@@ -380,13 +380,15 @@ export default function App() {
                 <LayoutDashboard className="w-4 h-4" />
                 Auditor
               </button>
-              <button
-                onClick={() => setCurrentTab('usage')}
-                className={`flex items-center gap-2 transition-colors ${currentTab === 'usage' ? 'text-[#2C2A28]' : 'text-[#8F837A] hover:text-[#2C2A28]'}`}
-              >
-                <Activity className="w-4 h-4" />
-                Audit Logs
-              </button>
+              {profile?.role !== 'admin' && (
+                <button
+                  onClick={() => setCurrentTab('usage')}
+                  className={`flex items-center gap-2 transition-colors ${currentTab === 'usage' ? 'text-[#2C2A28]' : 'text-[#8F837A] hover:text-[#2C2A28]'}`}
+                >
+                  <Activity className="w-4 h-4" />
+                  Audit Logs
+                </button>
+              )}
               {profile?.role === 'admin' && (
                 <button
                   onClick={() => setCurrentTab('admin')}
@@ -401,8 +403,7 @@ export default function App() {
             {profile?.role === 'admin' && (
               <Badge
                 variant="outline"
-                className="cursor-pointer bg-white px-3 py-1 font-mono hover:bg-zinc-100 transition-colors"
-                onClick={() => setCurrentTab('usage')}
+                className="bg-white px-3 py-1 font-mono transition-colors"
               >
                 <Zap className="w-3.5 h-3.5 mr-1.5 fill-yellow-400 text-yellow-500" />
                 {totalTokens.toLocaleString()} Session Usage
