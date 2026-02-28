@@ -254,6 +254,10 @@ Return ONLY a raw JSON object (no markdown, no code fences) in this exact schema
             response = gemini.models.generate_content(
                 model=PRIMARY_MODEL,
                 contents=system_instructions + "\n\n" + prompt,
+                config=genai_types.GenerateContentConfig(
+                    temperature=0.0,
+                    response_mime_type="application/json",
+                )
             )
             response_text = response.text
             if response.usage_metadata:
@@ -275,6 +279,10 @@ Return ONLY a raw JSON object (no markdown, no code fences) in this exact schema
             response = gemini.models.generate_content(
                 model=FALLBACK_MODEL,
                 contents=system_instructions + "\n\n" + prompt,
+                config=genai_types.GenerateContentConfig(
+                    temperature=0.0,
+                    response_mime_type="application/json",
+                )
             )
             response_text = response.text
             if response.usage_metadata:
