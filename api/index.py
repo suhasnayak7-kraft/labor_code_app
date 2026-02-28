@@ -10,6 +10,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../backend'))
 # Initialize app at the top level so Vercel's AST parser detects it
 app = FastAPI()
 
+@app.get("/api/health-check")
+async def basic_health():
+    return {"status": "alive", "message": "api/index.py is running"}
+
 try:
     from main import app as backend_app
     app.mount("/api", backend_app)
