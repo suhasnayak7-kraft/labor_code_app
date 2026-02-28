@@ -11,9 +11,8 @@ from fastapi.responses import JSONResponse
 import traceback
 from pypdf import PdfReader
 from dotenv import load_dotenv
-import google.generativeai as genai
-from anthropic import Anthropic
-from openai import OpenAI
+from google import genai
+from google.genai import types as genai_types
 from pydantic import BaseModel
 from supabase import create_client, Client
 
@@ -23,20 +22,21 @@ load_dotenv()
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
 if not all([SUPABASE_URL, SUPABASE_KEY]):
     raise RuntimeError("Missing critical environment variables (Supabase).")
 
+if not GEMINI_API_KEY:
+    raise RuntimeError("Missing GEMINI_API_KEY environment variable.")
+
 # Initialize clients
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
+gemini = genai.Client(api_key=GEMINI_API_KEY)
 
-# Optional clients
-anthropic_client = Anthropic(api_key=ANTHROPIC_API_KEY) if ANTHROPIC_API_KEY else None
-openai_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+# Primary model: Gemini 2.5 Flash (GA, 250K TPM free tier)
+# Fallback model: Gemini 1.5 Flash (higher RPD on free tier)
+PRIMARY_MODEL = "gemini-2.5-flash"
+FALLBACK_MODEL = "gemini-1.5-flash"
 
 app = FastAPI(title="Labour Code Auditor API")
 
@@ -71,16 +71,6 @@ class AuditResponse(BaseModel):
     provider: str
     response_time_ms: int
 
-class ModelStat(BaseModel):
-    model_id: str
-    provider: str
-    status: str
-    rpm: int
-    tpm: int
-
-class AdminStatsResponse(BaseModel):
-    models: list[ModelStat]
-
 class UserCreateRequest(BaseModel):
     email: str
     password: str
@@ -107,12 +97,12 @@ def extract_and_clean_text(file_bytes: bytes) -> str:
     return clean_text
 
 def generate_embedding(text: str) -> list[float]:
-    result = genai.embed_content(
-        model="models/embedding-001",
-        content=text,
-        task_type="retrieval_document"
+    result = gemini.models.embed_content(
+        model="gemini-embedding-001",
+        contents=text,
+        config=genai_types.EmbedContentConfig(output_dimensionality=768)
     )
-    return result['embedding']
+    return list(result.embeddings[0].values)
 
 async def get_current_user(authorization: Optional[str] = Header(None)):
     if not authorization or not authorization.startswith("Bearer "):
@@ -254,68 +244,43 @@ Return ONLY a raw JSON object (no markdown, no code fences) in this exact schema
 }}
 """
         final_provider = "google"
-        final_model = "gemini-1.5-flash"  # High TPM quota on free tier (1M TPM vs 2.5-flash's lower preview limits)
+        final_model = PRIMARY_MODEL
         findings = []
         comp_score = 50
         p_tokens, c_tokens, t_tokens = 0, 0, 0
 
-        # Model Routing Logic
+        # Gemini 2.5 Flash — primary model, with automatic fallback to 1.5 Flash
         try:
-            if model_id == "claude-3-5-sonnet" and anthropic_client:
-                final_provider = "anthropic"
-                final_model = "claude-3-5-sonnet-20241022"
-                response = anthropic_client.messages.create(
-                    model=final_model,
-                    max_tokens=2048,
-                    system=system_instructions,
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                response_text = response.content[0].text
-                p_tokens = response.usage.input_tokens
-                c_tokens = response.usage.output_tokens
-                t_tokens = p_tokens + c_tokens
-            elif model_id == "gpt-4o" and openai_client:
-                final_provider = "openai"
-                final_model = "gpt-4o"
-                response = openai_client.chat.completions.create(
-                    model=final_model,
-                    messages=[
-                        {"role": "system", "content": system_instructions},
-                        {"role": "user", "content": prompt}
-                    ],
-                    response_format={ "type": "json_object" }
-                )
-                response_text = response.choices[0].message.content
-                p_tokens = response.usage.prompt_tokens
-                c_tokens = response.usage.completion_tokens
-                t_tokens = response.usage.total_tokens
-            else:
-                # Default: Gemini 1.5 Flash (to handle 250k tokens comfortably within limits)
-                final_provider = "google"
-                final_model = "gemini-1.5-flash"
-                model = genai.GenerativeModel(final_model)
-                response = model.generate_content(
-                    contents=system_instructions + "\n\n" + prompt,
-                )
-                response_text = response.text
-                if response.usage_metadata:
-                    p_tokens = response.usage_metadata.prompt_token_count
-                    c_tokens = response.usage_metadata.candidates_token_count
-                    t_tokens = response.usage_metadata.total_token_count
-        except Exception as ai_err:
-            print(f"Provider error ({model_id}): {ai_err}. Falling back to Gemini 1.5 Flash.")
-            # Final Fallback to Gemini 1.5 Flash if selected provider fails
-            final_provider = "google"
-            final_model = "gemini-1.5-flash"
-            model = genai.GenerativeModel(final_model)
-            response = model.generate_content(
+            response = gemini.models.generate_content(
+                model=PRIMARY_MODEL,
                 contents=system_instructions + "\n\n" + prompt,
             )
             response_text = response.text
             if response.usage_metadata:
-                p_tokens = response.usage_metadata.prompt_token_count
-                c_tokens = response.usage_metadata.candidates_token_count
-                t_tokens = response.usage_metadata.total_token_count
+                p_tokens = response.usage_metadata.prompt_token_count or 0
+                c_tokens = response.usage_metadata.candidates_token_count or 0
+                t_tokens = response.usage_metadata.total_token_count or 0
+        except Exception as ai_err:
+            err_str = str(ai_err)
+            print(f"Gemini 2.5 Flash error: {ai_err}")
+            # If rate-limited (429), surface a clear message instead of silently falling back
+            if "429" in err_str or "quota" in err_str.lower() or "rate" in err_str.lower():
+                raise HTTPException(
+                    status_code=429,
+                    detail="Gemini API rate limit reached. The system processes a limited number of audits per minute. Please wait 60 seconds and try again."
+                )
+            # For other errors, fall back to Gemini 1.5 Flash
+            print(f"Falling back to {FALLBACK_MODEL}")
+            final_model = FALLBACK_MODEL
+            response = gemini.models.generate_content(
+                model=FALLBACK_MODEL,
+                contents=system_instructions + "\n\n" + prompt,
+            )
+            response_text = response.text
+            if response.usage_metadata:
+                p_tokens = response.usage_metadata.prompt_token_count or 0
+                c_tokens = response.usage_metadata.candidates_token_count or 0
+                t_tokens = response.usage_metadata.total_token_count or 0
         
         response_text = response_text.strip()
         if response_text.startswith("```json"):
@@ -485,14 +450,18 @@ async def ingest_markdown(
         if not chunks:
             raise HTTPException(status_code=400, detail="No content found in the file.")
 
-        # 4. Embed EVERYTHING as a single batch call to avoid Vercel timeouts (takes ~2 seconds for 300 chunks instead of 100 seconds)
+        # 4. Embed each chunk via the new google-genai SDK
+        # Note: new SDK does not support batch embedding in a single call like the old SDK did;
+        # we embed in small batches to stay within Vercel's 60s timeout
         try:
-            embed_results = genai.embed_content(
-                model="models/embedding-001",
-                content=chunks,
-                task_type="retrieval_document"
-            )
-            embeddings = embed_results['embedding']
+            embeddings = []
+            for chunk in chunks:
+                embed_result = gemini.models.embed_content(
+                    model="gemini-embedding-001",
+                    contents=chunk,
+                    config=genai_types.EmbedContentConfig(output_dimensionality=768)
+                )
+                embeddings.append(list(embed_result.embeddings[0].values))
         except Exception as e:
             print(f"Batch embedding failed: {e}")
             raise HTTPException(status_code=500, detail=f"Failed to generate embeddings from Gemini API: {str(e)}")
@@ -527,30 +496,22 @@ async def ingest_markdown(
         raise HTTPException(status_code=500, detail="Failed to ingest document.")
 
 
-@app.get("/admin/stats", response_model=AdminStatsResponse)
+@app.get("/admin/stats")
 async def get_admin_stats(user = Depends(get_current_user)):
     # 1. Verify user is admin
     profile_res = supabase.table("profiles").select("role").eq("id", user.id).single().execute()
     if not profile_res.data or profile_res.data.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
 
-    # 2. Check provider connectivity
-    key_status = {
-        "google": "Active" if os.environ.get("GEMINI_API_KEY") else "Inactive",
-        "anthropic": "Active" if os.environ.get("ANTHROPIC_API_KEY") else "Inactive",
-        "openai": "Active" if os.environ.get("OPENAI_API_KEY") else "Inactive"
-    }
-
-    # 3. Aggregate 60s logs
+    # 2. Aggregate last-60s logs for Gemini models
     from datetime import timedelta
     sixty_seconds_ago = (datetime.utcnow() - timedelta(seconds=60)).isoformat()
     logs_res = supabase.table("api_logs").select("model_id, total_tokens").gte("created_at", sixty_seconds_ago).execute()
     logs = logs_res.data if logs_res.data else []
 
     models_to_track = [
-        {"id": "gemini-2.5-flash", "provider": "google"},
-        {"id": "claude-3-5-sonnet", "provider": "anthropic"},
-        {"id": "gpt-4o", "provider": "openai"}
+        {"id": PRIMARY_MODEL, "provider": "google"},
+        {"id": FALLBACK_MODEL, "provider": "google"},
     ]
 
     stats = []
@@ -558,13 +519,12 @@ async def get_admin_stats(user = Depends(get_current_user)):
         model_logs = [l for l in logs if l.get("model_id") == m["id"]]
         rpm = len(model_logs)
         tpm = sum(l.get("total_tokens", 0) for l in model_logs)
-        
-        stats.append(ModelStat(
-            model_id=m["id"],
-            provider=m["provider"],
-            status=key_status.get(m["provider"], "Inactive"),
-            rpm=rpm,
-            tpm=tpm
-        ))
+        stats.append({
+            "model_id": m["id"],
+            "provider": m["provider"],
+            "status": "Active" if GEMINI_API_KEY else "Inactive",
+            "rpm": rpm,
+            "tpm": tpm
+        })
 
-    return AdminStatsResponse(models=stats)
+    return {"models": stats}

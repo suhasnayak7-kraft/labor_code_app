@@ -249,7 +249,7 @@ export default function App() {
 
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('model_id', 'gemini-1.5-flash');
+    formData.append('model_id', 'gemini-2.5-flash');
 
     try {
       const response = await fetch(`${API_URL}/audit`, {
