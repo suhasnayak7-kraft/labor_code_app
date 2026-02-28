@@ -624,7 +624,7 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                             <Shield className="text-[#606C5A] w-6 h-6" />
                         </div>
                         <div>
-                            <h1 className="font-serif text-2xl text-[#2C2A28]">Founder's Console</h1>
+                            <h1 className="font-serif text-2xl text-[#2C2A28]">Governance Console</h1>
                             <p className="text-[#8F837A] flex items-center gap-2 text-[13px] mt-1">
                                 Logged in as <span className="text-[#2C2A28] font-medium">{adminProfile?.full_name || session?.user?.email}</span>
                                 <Badge variant="secondary" className="bg-[#F3F3F2] text-[#5E5E5E] border-[#E6E4E0] text-[10px] uppercase tracking-wider h-4">Administrator</Badge>
@@ -997,9 +997,7 @@ export function AdminDashboard({ session, adminProfile }: { session: any, adminP
                                             <CardHeader className="pb-2 space-y-1">
                                                 <div className="flex items-center justify-between">
                                                     <CardTitle className="text-lg flex items-center gap-2 text-[#2C2A28]">
-                                                        {model.provider === 'anthropic' ? <Zap size={18} className="text-[#F2A65A]" /> :
-                                                            model.provider === 'openai' ? <Globe size={18} className="text-[#606C5A]" /> :
-                                                                <Activity size={18} className="text-[#4E7A94]" />}
+                                                        <Activity size={18} className="text-[#4E7A94]" />
                                                         <span className="font-mono tracking-tight text-[#2C2A28]">{model.model_id}</span>
                                                     </CardTitle>
                                                     <Badge
