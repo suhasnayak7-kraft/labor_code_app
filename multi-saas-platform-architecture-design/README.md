@@ -29,6 +29,10 @@ A comprehensive guide to building a lightweight, modular multi-tool SaaS platfor
 12. **[PRIVACY_POLICY_TEMPLATE.md](./PRIVACY_POLICY_TEMPLATE.md)** - DPDP Act 2023 compliant Privacy Policy template (ready-to-publish)
 13. **[TERMS_OF_SERVICE_TEMPLATE.md](./TERMS_OF_SERVICE_TEMPLATE.md)** - Terms of Service template aligned with Indian law (arbitration, consumer protection)
 
+### **Product & Growth** (For First 2 Tools)
+14. **[DPDP_AND_SHOP_ACT_USER_FLOWS_AND_UI.md](./DPDP_AND_SHOP_ACT_USER_FLOWS_AND_UI.md)** - Complete user flows, UI mockups, React components, API integration for DPDP & Shop Act tools
+15. **[GO_TO_MARKET_SALES_PRICING_STRATEGY.md](./GO_TO_MARKET_SALES_PRICING_STRATEGY.md)** - 6-month GTM roadmap, sales channels, pricing tiers, referral program, ₹0-CAC strategy
+
 ---
 
 ## 🚀 Quick Start Path
@@ -141,6 +145,8 @@ See DESIGN_SYSTEM.md for complete token reference.
 | MIGRATION_STRATEGY.md | Conversion plan | All (if migrating) |
 | PRIVACY_POLICY_TEMPLATE.md | Legal compliance (DPDP Act 2023) | All (required for launch) |
 | TERMS_OF_SERVICE_TEMPLATE.md | Legal compliance (Indian law) | All (required for launch) |
+| DPDP_AND_SHOP_ACT_USER_FLOWS_AND_UI.md | User flows, UI design, components | Designers, Frontend devs |
+| GO_TO_MARKET_SALES_PRICING_STRATEGY.md | Sales, pricing, GTM roadmap | All (go-to-market) |
 
 ---
 
@@ -161,7 +167,9 @@ multi-saas-platform-architecture-design/
 ├── 10-PRICING_FEATURE_GATING.md
 ├── 11-MIGRATION_STRATEGY.md
 ├── PRIVACY_POLICY_TEMPLATE.md (DPDP 2023 compliant)
-└── TERMS_OF_SERVICE_TEMPLATE.md (Indian law aligned)
+├── TERMS_OF_SERVICE_TEMPLATE.md (Indian law aligned)
+├── DPDP_AND_SHOP_ACT_USER_FLOWS_AND_UI.md (UI/UX design)
+└── GO_TO_MARKET_SALES_PRICING_STRATEGY.md (GTM & growth)
 ```
 
 ---
