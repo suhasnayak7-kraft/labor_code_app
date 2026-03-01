@@ -32,8 +32,8 @@
     /* #E6E4E0 */
     --input: 35 8% 89%;
     --ring: 95 8% 39%;
-    --radius: 0.5rem;
-    /* 8px — keep as-is */
+    --radius: 2px;
+    /* 2px — Minimal Japandi */
 
     --chart-1: 95 8% 39%;
     /* forest green */
