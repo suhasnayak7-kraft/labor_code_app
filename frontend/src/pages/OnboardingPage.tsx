@@ -3,6 +3,7 @@ import { ShieldCheck, Clock, LogOut } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
 import { useAuth } from '../hooks/useAuth';
+import { useNavigate } from 'react-router-dom';
 
 /**
  * OnboardingPage
@@ -12,6 +13,12 @@ import { useAuth } from '../hooks/useAuth';
  */
 export const OnboardingPage: React.FC = () => {
     const { signOut, profile } = useAuth();
+    const navigate = useNavigate();
+
+    const handleSignOut = async () => {
+        await signOut();
+        navigate('/login', { replace: true });
+    };
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-[#F3F3F2] p-4 text-[#2C2A28]">
@@ -51,7 +58,7 @@ export const OnboardingPage: React.FC = () => {
                         </Button>
                         <Button
                             variant="ghost"
-                            onClick={signOut}
+                            onClick={handleSignOut}
                             className="w-full text-[#8B4A42] hover:bg-[#F5ECEA] hover:text-[#8B4A42]"
                         >
                             <LogOut className="w-4 h-4 mr-2" />
