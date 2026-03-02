@@ -22,6 +22,9 @@ export const LoginPage: React.FC = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [fullName, setFullName] = useState('');
+    const [companyName, setCompanyName] = useState('');
+    const [companySize, setCompanySize] = useState('');
+    const [industry, setIndustry] = useState('');
 
     const handleSignIn = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -47,7 +50,12 @@ export const LoginPage: React.FC = () => {
             email,
             password,
             options: {
-                data: { full_name: fullName },
+                data: {
+                    full_name: fullName,
+                    company_name: companyName,
+                    company_size: companySize,
+                    industry: industry
+                },
                 emailRedirectTo: window.location.origin
             }
         });
@@ -121,6 +129,35 @@ export const LoginPage: React.FC = () => {
                                         <div className="relative">
                                             <Mail className="absolute left-3 top-3 h-4 w-4 text-[#8F837A]" />
                                             <Input id="signup-email" type="email" placeholder="jane@enterprise.com" className="pl-10 h-11 border-[#E6E4E0]" value={email} onChange={e => setEmail(e.target.value)} required />
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="company-name">Company Name</Label>
+                                        <Input id="company-name" placeholder="Acme Corp" className="h-11 border-[#E6E4E0]" value={companyName} onChange={e => setCompanyName(e.target.value)} required />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="space-y-2">
+                                            <Label htmlFor="company-size">Company Size</Label>
+                                            <select id="company-size" className="w-full h-11 border border-[#E6E4E0] rounded px-3 text-sm bg-white text-[#2C2A28] focus:ring-1 focus:ring-[#606C5A] outline-none" value={companySize} onChange={e => setCompanySize(e.target.value)} required>
+                                                <option value="">Select...</option>
+                                                <option value="1-50">1-50</option>
+                                                <option value="51-200">51-200</option>
+                                                <option value="201-1000">201-1000</option>
+                                                <option value="1000+">1000+</option>
+                                            </select>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="industry">Industry</Label>
+                                            <select id="industry" className="w-full h-11 border border-[#E6E4E0] rounded px-3 text-sm bg-white text-[#2C2A28] focus:ring-1 focus:ring-[#606C5A] outline-none" value={industry} onChange={e => setIndustry(e.target.value)} required>
+                                                <option value="">Select...</option>
+                                                <option value="Manufacturing">Manufacturing</option>
+                                                <option value="Retail">Retail</option>
+                                                <option value="Technology">Technology</option>
+                                                <option value="Finance">Finance</option>
+                                                <option value="Healthcare">Healthcare</option>
+                                                <option value="Education">Education</option>
+                                                <option value="Other">Other</option>
+                                            </select>
                                         </div>
                                     </div>
                                     <div className="space-y-2">
