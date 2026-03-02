@@ -15,18 +15,23 @@ export function useAuth() {
 
     useEffect(() => {
         let isMounted = true;
+        let timeoutFired = false;
 
-        // 2. Initial Session Check with timeout (5 seconds max)
+        // Single 3-second timeout for entire auth init (getSession + fetchProfile)
         const timeout = setTimeout(() => {
+            timeoutFired = true;
             if (isMounted) {
-                // If Supabase is slow, don't use cached session - force fresh login
+                // If Supabase is slow, show login page immediately
                 setSession(null);
+                setProfile(null);
                 localStorage.removeItem('sb_session');
                 setLoading(false);
             }
-        }, 5000);
+        }, 3000);
 
         supabase.auth.getSession().then(({ data: { session } }) => {
+            if (timeoutFired) return; // Timeout already fired, ignore this response
+
             clearTimeout(timeout);
             if (isMounted) {
                 setSession(session);
@@ -39,9 +44,12 @@ export function useAuth() {
                 }
             }
         }).catch(() => {
+            if (timeoutFired) return;
+
             clearTimeout(timeout);
             if (isMounted) {
                 setSession(null);
+                setProfile(null);
                 localStorage.removeItem('sb_session');
                 setLoading(false);
             }
@@ -71,12 +79,12 @@ export function useAuth() {
     /**
      * Fetch user's security profile from the 'profiles' table.
      * This determines if they are an admin or if they are approved to use the hub.
-     * Has a 5-second timeout to prevent hanging on slow networks.
+     * Has a 2-second timeout to keep total auth init under 5 seconds.
      */
     const fetchProfile = async (userId: string) => {
         const profileTimeout = setTimeout(() => {
             setLoading(false); // Don't wait forever for profile
-        }, 5000);
+        }, 2000);
 
         try {
             const { data, error } = await supabase
