@@ -6,3 +6,4 @@ pypdf
 python-multipart
 python-dotenv
 pydantic
+python-docx==1.1.2

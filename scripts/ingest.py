@@ -21,7 +21,7 @@ if not all([SUPABASE_URL, SUPABASE_KEY, GEMINI_API_KEY]):
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 genai_client = genai.Client(api_key=GEMINI_API_KEY)
 
-PDF_PATH = os.path.join(os.path.dirname(__file__), 'labor_code_2025.pdf')
+PDF_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'source_documents', 'labor_code_2025.pdf')
 CHUNK_SIZE = 1000
 
 def extract_and_clean_text(pdf_path: str) -> str:

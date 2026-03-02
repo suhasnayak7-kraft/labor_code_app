@@ -2,10 +2,10 @@ import os
 from dotenv import load_dotenv
 from supabase import create_client
 
-load_dotenv()
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 # Use the Anon key! Just like the frontend.
-load_dotenv("frontend/.env") # make sure we get the frontend ones too
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', 'frontend', '.env')) # make sure we get the frontend ones too
 
 # Actually we need sign in to get a token
 supabase = create_client(SUPABASE_URL, os.environ.get("VITE_SUPABASE_ANON_KEY"))
