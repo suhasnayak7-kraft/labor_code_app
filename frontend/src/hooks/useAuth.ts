@@ -97,20 +97,40 @@ export function useAuth() {
      */
     const fetchProfile = async (userId: string) => {
         const profileTimeout = setTimeout(() => {
+            console.warn('[Auth] Profile fetch timeout - setting loading to false');
             setLoading(false); // Don't wait forever for profile
         }, 2000);
 
         try {
+            console.log('[Auth] Fetching profile for user:', userId);
             const { data, error } = await supabase
                 .from('profiles')
                 .select('*')
                 .eq('id', userId)
                 .single();
 
-            if (error) throw error;
-            setProfile(data as Profile);
-        } catch (err) {
-            console.error("Error fetching security profile:", err);
+            if (error) {
+                // 404 (PGRST116) means profile doesn't exist - this is expected for new users
+                if (error.code === 'PGRST116') {
+                    console.warn('[Auth] Profile not found (404) - user may be newly signed up');
+                    setProfile(null);
+                    clearTimeout(profileTimeout);
+                    setLoading(false);
+                    return;
+                }
+                console.error('[Auth] Profile fetch error:', error.code, error.message);
+                throw error;
+            }
+
+            if (!data) {
+                console.warn('[Auth] Profile query returned no data - user may not be in database yet');
+                setProfile(null);
+            } else {
+                console.log('[Auth] Profile loaded successfully:', { id: data.id, is_approved: data.is_approved, role: data.role });
+                setProfile(data as Profile);
+            }
+        } catch (err: any) {
+            console.error('[Auth] Error fetching security profile:', err?.message || err);
             setProfile(null);
         } finally {
             clearTimeout(profileTimeout);

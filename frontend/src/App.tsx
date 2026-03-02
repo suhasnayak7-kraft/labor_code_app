@@ -7,6 +7,7 @@ import { useAuth } from './hooks/useAuth';
 
 // Security Guards
 import { AuthGuard, ApprovalGuard, AdminGuard } from './components/auth/AuthGuards';
+import { ErrorBoundary } from './components/auth/ErrorBoundary';
 
 // Pages
 import { LoginPage } from './pages/LoginPage';
@@ -55,9 +56,11 @@ export default function App() {
         <Route path="/" element={
           <AuthGuard>
             <ApprovalGuard>
-              <Layout signOut={signOut} profile={profile}>
-                <AuditorPage session={session} profile={profile} apiUrl={API_URL} />
-              </Layout>
+              <ErrorBoundary>
+                <Layout signOut={signOut} profile={profile}>
+                  <AuditorPage session={session} profile={profile} apiUrl={API_URL} />
+                </Layout>
+              </ErrorBoundary>
             </ApprovalGuard>
           </AuthGuard>
         } />
@@ -65,9 +68,11 @@ export default function App() {
         <Route path="/usage" element={
           <AuthGuard>
             <ApprovalGuard>
-              <Layout signOut={signOut} profile={profile}>
-                <UsagePage token={session?.access_token} dailyLimit={profile?.daily_audit_limit} role={profile?.role} />
-              </Layout>
+              <ErrorBoundary>
+                <Layout signOut={signOut} profile={profile}>
+                  <UsagePage token={session?.access_token} dailyLimit={profile?.daily_audit_limit} role={profile?.role} />
+                </Layout>
+              </ErrorBoundary>
             </ApprovalGuard>
           </AuthGuard>
         } />
@@ -76,9 +81,11 @@ export default function App() {
         <Route path="/admin" element={
           <AuthGuard>
             <AdminGuard>
-              <Layout signOut={signOut} profile={profile}>
-                <AdminPage session={session} adminProfile={profile} />
-              </Layout>
+              <ErrorBoundary>
+                <Layout signOut={signOut} profile={profile}>
+                  <AdminPage session={session} adminProfile={profile} />
+                </Layout>
+              </ErrorBoundary>
             </AdminGuard>
           </AuthGuard>
         } />
