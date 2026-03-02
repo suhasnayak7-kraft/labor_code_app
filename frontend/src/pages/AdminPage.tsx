@@ -71,11 +71,11 @@ interface ToolConfig {
     tier: number;
     status: 'live' | 'coming_soon' | 'disabled';
     free_limit: number;
-    paid_limit: number;
-    team_limit: number;
+    pro_limit: number;
+    max_limit: number;
     enabled_for_free: boolean;
-    enabled_for_paid: boolean;
-    enabled_for_team: boolean;
+    enabled_for_pro: boolean;
+    enabled_for_max: boolean;
     sort_order: number;
 }
 
@@ -311,6 +311,26 @@ export function AdminPage({ session, adminProfile }: { session: any, adminProfil
 
     useEffect(() => {
         fetchData();
+
+        // Subscribe to real-time changes
+        const profilesSubscription = supabase
+            .channel('public:profiles')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
+                fetchData();
+            })
+            .subscribe();
+
+        const waitingListSubscription = supabase
+            .channel('public:waiting_list')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'waiting_list' }, () => {
+                fetchData();
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(profilesSubscription);
+            supabase.removeChannel(waitingListSubscription);
+        };
     }, []);
 
     const updateLimit = async (profileId: string, newLimit: number) => {
@@ -679,11 +699,11 @@ export function AdminPage({ session, adminProfile }: { session: any, adminProfil
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             {(planConfigs.length > 0 ? planConfigs : [
                                 { id: 'free', display_name: 'Free', price_monthly: 0, price_annual: 0, max_seats: 1, description: 'Self-serve access to get started', features: [], sort_order: 1, is_active: true },
-                                { id: 'paid', display_name: 'Paid', price_monthly: 999, price_annual: 799, max_seats: 1, description: 'For compliance professionals & CAs', features: [], sort_order: 2, is_active: true },
-                                { id: 'team', display_name: 'Team', price_monthly: 2499, price_annual: 1999, max_seats: 5, description: 'For firms with multiple compliance users', features: [], sort_order: 3, is_active: true },
+                                { id: 'pro', display_name: 'Pro', price_monthly: 49900, price_annual: 499000, max_seats: 5, description: 'For growing businesses', features: [], sort_order: 2, is_active: true },
+                                { id: 'max', display_name: 'Max', price_monthly: 99900, price_annual: 999000, max_seats: 10, description: 'For large organizations', features: [], sort_order: 3, is_active: true },
                             ] as PlanConfig[]).map(plan => {
-                                const accentMap: Record<string, string> = { free: 'border-t-[#C0B4A8]', paid: 'border-t-[#606C5A]', team: 'border-t-[#4E7A94]' };
-                                const badgeMap: Record<string, string> = { free: 'bg-[#F3F3F2] text-[#5E5E5E] border-[#E6E4E0]', paid: 'bg-[#ECF0E8] text-[#606C5A] border-[#DCE4D5]', team: 'bg-[#EBF3FA] text-[#4E7A94] border-[#C3DBE9]' };
+                                const accentMap: Record<string, string> = { free: 'border-t-[#C0B4A8]', pro: 'border-t-[#606C5A]', max: 'border-t-[#4E7A94]' };
+                                const badgeMap: Record<string, string> = { free: 'bg-[#F3F3F2] text-[#5E5E5E] border-[#E6E4E0]', pro: 'bg-[#ECF0E8] text-[#606C5A] border-[#DCE4D5]', max: 'bg-[#EBF3FA] text-[#4E7A94] border-[#C3DBE9]' };
                                 const isSaving = isSavingPlan === plan.id;
                                 const isEditing = editingPlan === plan.id;
                                 return (
@@ -722,7 +742,7 @@ export function AdminPage({ session, adminProfile }: { session: any, adminProfil
                                                             onBlur={e => { const v = parseInt(e.target.value, 10); if (!isNaN(v) && v !== plan.price_annual) updatePlanConfig(plan.id, 'price_annual', v); }}
                                                         />
                                                     </div>
-                                                    {plan.id === 'team' && (
+                                                    {(plan.id === 'pro' || plan.id === 'max') && (
                                                         <div className="flex items-center gap-2">
                                                             <span className="text-[11px] text-[#8F837A] w-24 shrink-0">Max Seats</span>
                                                             <Input
@@ -770,7 +790,7 @@ export function AdminPage({ session, adminProfile }: { session: any, adminProfil
                                             ) : (
                                                 <p className="text-[11px] text-[#C0B4A8] italic">No features listed yet.</p>
                                             )}
-                                            {plan.id === 'team' && !isEditing && (
+                                            {(plan.id === 'pro' || plan.id === 'max') && !isEditing && (
                                                 <div className="mt-3 text-[11px] text-[#8F837A] border-t border-[#E6E4E0] pt-2">
                                                     Max seats: <span className="font-medium text-[#2C2A28]">{plan.max_seats}</span>
                                                 </div>
@@ -804,8 +824,10 @@ export function AdminPage({ session, adminProfile }: { session: any, adminProfil
                                             <TableHead className="text-[10px] font-bold uppercase tracking-widest text-[#8F837A] text-center">Status</TableHead>
                                             <TableHead className="text-[10px] font-bold uppercase tracking-widest text-[#8F837A] text-center">Free</TableHead>
                                             <TableHead className="text-[10px] font-bold uppercase tracking-widest text-[#8F837A] text-center">Free Limit</TableHead>
-                                            <TableHead className="text-[10px] font-bold uppercase tracking-widest text-[#8F837A] text-center">Paid</TableHead>
-                                            <TableHead className="text-[10px] font-bold uppercase tracking-widest text-[#8F837A] text-center pr-6">Team</TableHead>
+                                            <TableHead className="text-[10px] font-bold uppercase tracking-widest text-[#8F837A] text-center">Pro</TableHead>
+                                            <TableHead className="text-[10px] font-bold uppercase tracking-widest text-[#8F837A] text-center">Pro Limit</TableHead>
+                                            <TableHead className="text-[10px] font-bold uppercase tracking-widest text-[#8F837A] text-center">Max</TableHead>
+                                            <TableHead className="text-[10px] font-bold uppercase tracking-widest text-[#8F837A] text-center pr-6">Max Limit</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -869,19 +891,63 @@ export function AdminPage({ session, adminProfile }: { session: any, adminProfil
                                                     </TableCell>
                                                     <TableCell className="text-center">
                                                         <Switch
-                                                            checked={tool.enabled_for_paid}
-                                                            onCheckedChange={(val) => updateToolConfig(tool.id, 'enabled_for_paid', val)}
+                                                            checked={tool.enabled_for_pro}
+                                                            onCheckedChange={(val) => updateToolConfig(tool.id, 'enabled_for_pro', val)}
+                                                            disabled={isSaving}
+                                                            className="data-[state=checked]:bg-[#606C5A]"
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell className="text-center">
+                                                        {tool.enabled_for_pro ? (
+                                                            <div className="flex items-center justify-center gap-1.5">
+                                                                <Input
+                                                                    type="number"
+                                                                    min={0}
+                                                                    defaultValue={tool.pro_limit === -1 ? '' : tool.pro_limit}
+                                                                    placeholder={tool.pro_limit === -1 ? '∞' : String(tool.pro_limit)}
+                                                                    className="w-16 h-7 text-center text-[12px] border-[#E6E4E0] text-[#2C2A28]"
+                                                                    onBlur={(e) => {
+                                                                        const val = e.target.value === '' ? -1 : parseInt(e.target.value, 10);
+                                                                        if (!isNaN(val) && val !== tool.pro_limit) {
+                                                                            updateToolConfig(tool.id, 'pro_limit', val);
+                                                                        }
+                                                                    }}
+                                                                />
+                                                                <span className="text-[10px] text-[#8F837A]">/mo</span>
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-[12px] text-[#C0B4A8]">—</span>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell className="text-center">
+                                                        <Switch
+                                                            checked={tool.enabled_for_max}
+                                                            onCheckedChange={(val) => updateToolConfig(tool.id, 'enabled_for_max', val)}
                                                             disabled={isSaving}
                                                             className="data-[state=checked]:bg-[#606C5A]"
                                                         />
                                                     </TableCell>
                                                     <TableCell className="text-center pr-6">
-                                                        <Switch
-                                                            checked={tool.enabled_for_team}
-                                                            onCheckedChange={(val) => updateToolConfig(tool.id, 'enabled_for_team', val)}
-                                                            disabled={isSaving}
-                                                            className="data-[state=checked]:bg-[#606C5A]"
-                                                        />
+                                                        {tool.enabled_for_max ? (
+                                                            <div className="flex items-center justify-center gap-1.5">
+                                                                <Input
+                                                                    type="number"
+                                                                    min={0}
+                                                                    defaultValue={tool.max_limit === -1 ? '' : tool.max_limit}
+                                                                    placeholder={tool.max_limit === -1 ? '∞' : String(tool.max_limit)}
+                                                                    className="w-16 h-7 text-center text-[12px] border-[#E6E4E0] text-[#2C2A28]"
+                                                                    onBlur={(e) => {
+                                                                        const val = e.target.value === '' ? -1 : parseInt(e.target.value, 10);
+                                                                        if (!isNaN(val) && val !== tool.max_limit) {
+                                                                            updateToolConfig(tool.id, 'max_limit', val);
+                                                                        }
+                                                                    }}
+                                                                />
+                                                                <span className="text-[10px] text-[#8F837A]">/mo</span>
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-[12px] text-[#C0B4A8]">—</span>
+                                                        )}
                                                     </TableCell>
                                                 </TableRow>
                                             );
