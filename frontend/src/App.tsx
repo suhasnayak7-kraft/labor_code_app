@@ -13,11 +13,13 @@ import { ErrorBoundary } from './components/auth/ErrorBoundary';
 import { LoginPage } from './pages/LoginPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { ComplianceHubPage } from './pages/ComplianceHubPage';
+import { LabourAuditPage } from './pages/LabourAuditPage';
+import { ProfilePage } from './pages/ProfilePage';
 import { UsagePage } from './pages/UsagePage';
 import { AdminPage } from './pages/AdminPage';
 
 // Layout Components
-import { ShieldCheck, Activity, LogOut } from 'lucide-react';
+import { ShieldCheck, User, LogOut } from 'lucide-react';
 import { Button } from './components/ui/button';
 
 const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:8000' : '/api');
@@ -57,8 +59,32 @@ export default function App() {
           <AuthGuard>
             <ApprovalGuard>
               <ErrorBoundary>
-                <Layout signOut={signOut} profile={profile}>
+                <Layout signOut={signOut} profile={profile} session={session}>
                   <ComplianceHubPage session={session} profile={profile} apiUrl={API_URL} />
+                </Layout>
+              </ErrorBoundary>
+            </ApprovalGuard>
+          </AuthGuard>
+        } />
+
+        <Route path="/audit" element={
+          <AuthGuard>
+            <ApprovalGuard>
+              <ErrorBoundary>
+                <Layout signOut={signOut} profile={profile} session={session}>
+                  <LabourAuditPage session={session} profile={profile} apiUrl={API_URL} />
+                </Layout>
+              </ErrorBoundary>
+            </ApprovalGuard>
+          </AuthGuard>
+        } />
+
+        <Route path="/profile" element={
+          <AuthGuard>
+            <ApprovalGuard>
+              <ErrorBoundary>
+                <Layout signOut={signOut} profile={profile} session={session}>
+                  <ProfilePage session={session} profile={profile} />
                 </Layout>
               </ErrorBoundary>
             </ApprovalGuard>
@@ -69,7 +95,7 @@ export default function App() {
           <AuthGuard>
             <ApprovalGuard>
               <ErrorBoundary>
-                <Layout signOut={signOut} profile={profile}>
+                <Layout signOut={signOut} profile={profile} session={session}>
                   <UsagePage token={session?.access_token} dailyLimit={profile?.daily_audit_limit} role={profile?.role} />
                 </Layout>
               </ErrorBoundary>
@@ -82,7 +108,7 @@ export default function App() {
           <AuthGuard>
             <AdminGuard>
               <ErrorBoundary>
-                <Layout signOut={signOut} profile={profile}>
+                <Layout signOut={signOut} profile={profile} session={session}>
                   <AdminPage session={session} adminProfile={profile} />
                 </Layout>
               </ErrorBoundary>
@@ -99,10 +125,10 @@ export default function App() {
 
 /**
  * Layout Component
- * 
+ *
  * Provides a consistent shell (Navbar) for all internal pages.
  */
-const Layout: React.FC<{ children: React.ReactNode, signOut: () => void, profile: any }> = ({ children, signOut, profile }) => {
+const Layout: React.FC<{ children: React.ReactNode, signOut: () => void, profile: any, session: any }> = ({ children, signOut, profile, session }) => {
   const currentPath = window.location.pathname;
   const navigate = useNavigate();
 
@@ -133,7 +159,7 @@ const Layout: React.FC<{ children: React.ReactNode, signOut: () => void, profile
                     to="/usage"
                     className={`flex items-center gap-2 transition-colors ${currentPath === '/usage' ? 'text-[#2C2A28]' : 'text-[#8F837A] hover:text-[#2C2A28]'}`}
                   >
-                    <Activity className="w-4 h-4" />
+                    <ShieldCheck className="w-4 h-4" />
                     Usage Analytics
                   </Link>
                   <Link
@@ -147,10 +173,22 @@ const Layout: React.FC<{ children: React.ReactNode, signOut: () => void, profile
               )}
             </div>
 
-            <Button variant="ghost" size="sm" onClick={signOut} className="text-[#8B4A42] hover:bg-[#F5ECEA] hover:text-[#8B4A42]">
-              <LogOut className="w-4 h-4 mr-2" />
-              Sign Out
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate('/profile')}
+                className={`flex items-center gap-2 transition-colors ${currentPath === '/profile' ? 'text-[#2C2A28]' : 'text-[#8F837A] hover:text-[#2C2A28]'}`}
+              >
+                <User className="w-4 h-4" />
+                <span className="hidden sm:inline">Profile</span>
+              </Button>
+
+              <Button variant="ghost" size="sm" onClick={signOut} className="text-[#8B4A42] hover:bg-[#F5ECEA] hover:text-[#8B4A42]">
+                <LogOut className="w-4 h-4 mr-2" />
+                Sign Out
+              </Button>
+            </div>
           </div>
         </div>
       </nav>
