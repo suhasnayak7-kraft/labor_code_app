@@ -59,8 +59,8 @@ export default function App() {
           <AuthGuard>
             <ApprovalGuard>
               <ErrorBoundary>
-                <Layout signOut={signOut} profile={profile} session={session}>
-                  <ComplianceHubPage session={session} profile={profile} apiUrl={API_URL} />
+                <Layout signOut={signOut} profile={profile}>
+                  <ComplianceHubPage profile={profile} />
                 </Layout>
               </ErrorBoundary>
             </ApprovalGuard>
@@ -71,7 +71,7 @@ export default function App() {
           <AuthGuard>
             <ApprovalGuard>
               <ErrorBoundary>
-                <Layout signOut={signOut} profile={profile} session={session}>
+                <Layout signOut={signOut} profile={profile}>
                   <LabourAuditPage session={session} profile={profile} apiUrl={API_URL} />
                 </Layout>
               </ErrorBoundary>
@@ -83,7 +83,7 @@ export default function App() {
           <AuthGuard>
             <ApprovalGuard>
               <ErrorBoundary>
-                <Layout signOut={signOut} profile={profile} session={session}>
+                <Layout signOut={signOut} profile={profile}>
                   <ProfilePage session={session} profile={profile} />
                 </Layout>
               </ErrorBoundary>
@@ -95,7 +95,7 @@ export default function App() {
           <AuthGuard>
             <ApprovalGuard>
               <ErrorBoundary>
-                <Layout signOut={signOut} profile={profile} session={session}>
+                <Layout signOut={signOut} profile={profile}>
                   <UsagePage token={session?.access_token} dailyLimit={profile?.daily_audit_limit} role={profile?.role} />
                 </Layout>
               </ErrorBoundary>
@@ -108,7 +108,7 @@ export default function App() {
           <AuthGuard>
             <AdminGuard>
               <ErrorBoundary>
-                <Layout signOut={signOut} profile={profile} session={session}>
+                <Layout signOut={signOut} profile={profile}>
                   <AdminPage session={session} adminProfile={profile} />
                 </Layout>
               </ErrorBoundary>
@@ -128,7 +128,7 @@ export default function App() {
  *
  * Provides a consistent shell (Navbar) for all internal pages.
  */
-const Layout: React.FC<{ children: React.ReactNode, signOut: () => void, profile: any, session: any }> = ({ children, signOut, profile, session }) => {
+const Layout: React.FC<{ children: React.ReactNode, signOut: () => void, profile: any }> = ({ children, signOut, profile }) => {
   const currentPath = window.location.pathname;
   const navigate = useNavigate();
 

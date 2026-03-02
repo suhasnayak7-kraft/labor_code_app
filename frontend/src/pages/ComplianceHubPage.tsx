@@ -15,12 +15,10 @@ interface Tool {
 }
 
 interface ComplianceHubPageProps {
-    session: any;
     profile: any;
-    apiUrl: string;
 }
 
-export const ComplianceHubPage: React.FC<ComplianceHubPageProps> = ({ session, profile, apiUrl }) => {
+export const ComplianceHubPage: React.FC<ComplianceHubPageProps> = ({ profile }) => {
     const navigate = useNavigate();
 
     const tools: Tool[] = [
@@ -88,11 +86,10 @@ export const ComplianceHubPage: React.FC<ComplianceHubPageProps> = ({ session, p
                 {tools.map((tool) => (
                     <Card
                         key={tool.id}
-                        className={`relative transition-all duration-300 ${
-                            tool.status === 'active'
-                                ? 'cursor-pointer hover:shadow-lg hover:border-[#606C5A]'
-                                : 'opacity-60'
-                        }`}
+                        className={`relative transition-all duration-300 ${tool.status === 'active'
+                            ? 'cursor-pointer hover:shadow-lg hover:border-[#606C5A]'
+                            : 'opacity-60'
+                            }`}
                         onClick={() => handleToolClick(tool)}
                     >
                         <CardHeader>
