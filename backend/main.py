@@ -3,6 +3,7 @@ import io
 import re
 import json
 import time
+import hashlib
 from datetime import datetime
 from typing import Optional
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Header, Form, Request
@@ -33,10 +34,8 @@ if not GEMINI_API_KEY:
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 gemini = genai.Client(api_key=GEMINI_API_KEY)
 
-# Primary model: Gemini 2.5 Flash (GA, 250K TPM free tier)
-# Fallback model: Gemini 1.5 Flash (higher RPD on free tier)
+# Primary model: Gemini 2.5 Flash (latest GA free tier)
 PRIMARY_MODEL = "gemini-2.5-flash"
-FALLBACK_MODEL = "gemini-1.5-flash"
 
 app = FastAPI(title="Labour Code Auditor API")
 
@@ -304,31 +303,19 @@ Return ONLY a raw JSON object (no markdown, no code fences) in this exact schema
         except Exception as ai_err:
             err_str = str(ai_err)
             print(f"Gemini 2.5 Flash error: {ai_err}")
-            # If rate-limited (429), surface a clear message instead of silently falling back
+            
+            # Surface specific rate limit errors
             if "429" in err_str or "quota" in err_str.lower() or "rate" in err_str.lower():
                 raise HTTPException(
                     status_code=429,
-                    detail="Gemini API rate limit reached. The system processes a limited number of audits per minute. Please wait 60 seconds and try again."
+                    detail="Gemini API rate limit reached. Please wait 60 seconds and try again."
                 )
-            # For other errors, fall back to Gemini 1.5 Flash
-            print(f"Falling back to {FALLBACK_MODEL}")
-            final_model = FALLBACK_MODEL
-            response = gemini.models.generate_content(
-                model=FALLBACK_MODEL,
-                contents=system_instructions + "\n\n" + prompt,
-                config=genai_types.GenerateContentConfig(
-                    temperature=0.0,
-                    top_p=0.95,
-                    top_k=40,
-                    seed=42,
-                    response_mime_type="application/json",
-                )
+            
+            # For any other AI error, raise a clear error to avoid inconsistent results
+            raise HTTPException(
+                status_code=503,
+                detail=f"The AI Auditor is currently unavailable. To ensure 100% accuracy, we are not falling back to lower-tier models. Please try again in a few moments. (Error: {err_str[:50]})"
             )
-            response_text = response.text
-            if response.usage_metadata:
-                p_tokens = response.usage_metadata.prompt_token_count or 0
-                c_tokens = response.usage_metadata.candidates_token_count or 0
-                t_tokens = response.usage_metadata.total_token_count or 0
         
         response_text = response_text.strip()
         if response_text.startswith("```json"):
@@ -348,12 +335,14 @@ Return ONLY a raw JSON object (no markdown, no code fences) in this exact schema
         resp_time_ms = int((end_time - start_time) * 1000)
 
         # 5. Save usage metadata to API logs
+        hashed_filename = hashlib.sha256(file.filename.encode()).hexdigest()[:16]
+        
         supabase.table("api_logs").insert({
             "endpoint": "/audit",
             "prompt_tokens": p_tokens,
             "completion_tokens": c_tokens,
             "total_tokens": t_tokens,
-            "filename": file.filename,
+            "filename": hashed_filename,
             "compliance_score": comp_score,
             "user_id": user.id,
             "findings": findings,

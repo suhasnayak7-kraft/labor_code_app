@@ -17,18 +17,15 @@ export function useAuth() {
         let isMounted = true;
         let timeoutFired = false;
 
-        // Single 3-second timeout for entire auth init (getSession + fetchProfile)
+        // Single 10-second timeout for entire auth init (getSession + fetchProfile)
         const timeout = setTimeout(() => {
             timeoutFired = true;
             if (isMounted) {
-                // If Supabase is slow, show login page immediately
-                console.warn('[Auth] Timeout: Supabase took >3s, showing login page');
-                setSession(null);
-                setProfile(null);
-                localStorage.removeItem('sb_session');
+                // If Supabase is slow, allow the UI to show current state (or redirect to login if no session)
+                console.warn('[Auth] Timeout: Supabase took >10s, proceeding with available state');
                 setLoading(false);
             }
-        }, 3000);
+        }, 10000);
 
         // Verify Supabase is initialized
         if (!supabase.auth) {

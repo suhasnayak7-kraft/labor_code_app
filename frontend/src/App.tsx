@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, Link, useNavigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 
 // Hooks & Types
@@ -104,6 +104,7 @@ export default function App() {
  */
 const Layout: React.FC<{ children: React.ReactNode, signOut: () => void, profile: any }> = ({ children, signOut, profile }) => {
   const currentPath = window.location.pathname;
+  const navigate = useNavigate();
 
   return (
     <div className="min-h-screen bg-[#F3F3F2] text-[#2C2A28] font-sans">
@@ -111,7 +112,7 @@ const Layout: React.FC<{ children: React.ReactNode, signOut: () => void, profile
         <div className="container mx-auto flex h-16 items-center justify-between px-4 md:px-6">
           <div
             className="flex items-center gap-2 font-bold text-xl tracking-tight text-[#2C2A28] cursor-pointer"
-            onClick={() => window.location.href = '/'}
+            onClick={() => navigate('/')}
           >
             <ShieldCheck className="w-6 h-6 text-[#606C5A]" />
             AuditAI
@@ -119,29 +120,29 @@ const Layout: React.FC<{ children: React.ReactNode, signOut: () => void, profile
 
           <div className="flex items-center gap-6">
             <div className="hidden md:flex items-center gap-4 text-sm font-medium">
-              <a
-                href="/"
+              <Link
+                to="/"
                 className={`flex items-center gap-2 transition-colors ${currentPath === '/' ? 'text-[#2C2A28]' : 'text-[#8F837A] hover:text-[#2C2A28]'}`}
               >
                 <ShieldCheck className="w-4 h-4" />
                 Compliance Hub
-              </a>
+              </Link>
               {profile?.role === 'admin' && (
                 <>
-                  <a
-                    href="/usage"
+                  <Link
+                    to="/usage"
                     className={`flex items-center gap-2 transition-colors ${currentPath === '/usage' ? 'text-[#2C2A28]' : 'text-[#8F837A] hover:text-[#2C2A28]'}`}
                   >
                     <Activity className="w-4 h-4" />
                     Usage Analytics
-                  </a>
-                  <a
-                    href="/admin"
+                  </Link>
+                  <Link
+                    to="/admin"
                     className={`flex items-center gap-2 transition-colors ${currentPath === '/admin' ? 'text-[#2C2A28]' : 'text-[#8F837A] hover:text-[#2C2A28]'}`}
                   >
                     <ShieldCheck className="w-4 h-4" />
                     Admin
-                  </a>
+                  </Link>
                 </>
               )}
             </div>
