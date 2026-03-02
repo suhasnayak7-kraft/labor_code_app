@@ -39,11 +39,25 @@ export function useAuth() {
             return;
         }
 
+        // Check for auth error in URL hash (Supabase common pattern)
+        const hash = window.location.hash;
+        if (hash.includes('error=') || hash.includes('error_description=')) {
+            const params = new URLSearchParams(hash.substring(1));
+            const error = params.get('error_description') || params.get('error');
+            console.error('[Auth] Redirect error detected:', error);
+            // Optionally toast or set state, but getting session will likely fail anyway
+        }
+
         // Call getSession with error boundary
         Promise.resolve()
             .then(() => supabase.auth.getSession())
-            .then(({ data: { session } }) => {
+            .then(({ data: { session }, error }) => {
                 if (timeoutFired || !isMounted) return;
+
+                if (error) {
+                    console.error('[Auth] getSession returned error:', error.message);
+                    throw error;
+                }
 
                 clearTimeout(timeout);
                 setSession(session);
