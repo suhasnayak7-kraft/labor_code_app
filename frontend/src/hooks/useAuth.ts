@@ -14,22 +14,44 @@ export function useAuth() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // 1. Initial Session Check
+        // 1. Check for cached session first (instant load)
+        const cachedSession = localStorage.getItem('sb_session');
+        if (cachedSession) {
+            try {
+                setSession(JSON.parse(cachedSession));
+            } catch (e) {
+                localStorage.removeItem('sb_session');
+            }
+        }
+
+        // 2. Initial Session Check with timeout (5 seconds max)
+        const timeout = setTimeout(() => {
+            setLoading(false); // Don't wait forever
+        }, 5000);
+
         supabase.auth.getSession().then(({ data: { session } }) => {
+            clearTimeout(timeout);
             setSession(session);
             if (session) {
+                localStorage.setItem('sb_session', JSON.stringify(session));
                 fetchProfile(session.user.id);
             } else {
+                localStorage.removeItem('sb_session');
                 setLoading(false);
             }
+        }).catch(() => {
+            clearTimeout(timeout);
+            setLoading(false);
         });
 
-        // 2. Listen for Auth Changes (Sign In, Sign Out, Token Refresh)
+        // 3. Listen for Auth Changes (Sign In, Sign Out, Token Refresh)
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
             setSession(session);
             if (session) {
+                localStorage.setItem('sb_session', JSON.stringify(session));
                 await fetchProfile(session.user.id);
             } else {
+                localStorage.removeItem('sb_session');
                 setProfile(null);
                 setLoading(false);
             }
@@ -41,8 +63,13 @@ export function useAuth() {
     /**
      * Fetch user's security profile from the 'profiles' table.
      * This determines if they are an admin or if they are approved to use the hub.
+     * Has a 5-second timeout to prevent hanging on slow networks.
      */
     const fetchProfile = async (userId: string) => {
+        const profileTimeout = setTimeout(() => {
+            setLoading(false); // Don't wait forever for profile
+        }, 5000);
+
         try {
             const { data, error } = await supabase
                 .from('profiles')
@@ -56,6 +83,7 @@ export function useAuth() {
             console.error("Error fetching security profile:", err);
             setProfile(null);
         } finally {
+            clearTimeout(profileTimeout);
             setLoading(false);
         }
     };
