@@ -22,6 +22,7 @@ export function useAuth() {
             timeoutFired = true;
             if (isMounted) {
                 // If Supabase is slow, show login page immediately
+                console.warn('[Auth] Timeout: Supabase took >3s, showing login page');
                 setSession(null);
                 setProfile(null);
                 localStorage.removeItem('sb_session');
@@ -29,11 +30,25 @@ export function useAuth() {
             }
         }, 3000);
 
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            if (timeoutFired) return; // Timeout already fired, ignore this response
-
+        // Verify Supabase is initialized
+        if (!supabase.auth) {
+            console.error('[Auth] Supabase not initialized - check env vars');
             clearTimeout(timeout);
             if (isMounted) {
+                setSession(null);
+                setProfile(null);
+                setLoading(false);
+            }
+            return;
+        }
+
+        // Call getSession with error boundary
+        Promise.resolve()
+            .then(() => supabase.auth.getSession())
+            .then(({ data: { session } }) => {
+                if (timeoutFired || !isMounted) return;
+
+                clearTimeout(timeout);
                 setSession(session);
                 if (session) {
                     localStorage.setItem('sb_session', JSON.stringify(session));
@@ -42,18 +57,17 @@ export function useAuth() {
                     localStorage.removeItem('sb_session');
                     setLoading(false);
                 }
-            }
-        }).catch(() => {
-            if (timeoutFired) return;
+            })
+            .catch((error) => {
+                if (timeoutFired || !isMounted) return;
 
-            clearTimeout(timeout);
-            if (isMounted) {
+                console.error('[Auth] getSession error:', error?.message || error);
+                clearTimeout(timeout);
                 setSession(null);
                 setProfile(null);
                 localStorage.removeItem('sb_session');
                 setLoading(false);
-            }
-        });
+            });
 
         // 3. Listen for Auth Changes (Sign In, Sign Out, Token Refresh)
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
