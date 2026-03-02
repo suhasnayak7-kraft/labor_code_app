@@ -12,12 +12,12 @@ import { ErrorBoundary } from './components/auth/ErrorBoundary';
 // Pages
 import { LoginPage } from './pages/LoginPage';
 import { OnboardingPage } from './pages/OnboardingPage';
-import { AuditorPage } from './pages/AuditorPage';
+import { ComplianceHubPage } from './pages/ComplianceHubPage';
 import { UsagePage } from './pages/UsagePage';
 import { AdminPage } from './pages/AdminPage';
 
 // Layout Components
-import { ShieldCheck, LayoutDashboard, Activity, LogOut } from 'lucide-react';
+import { ShieldCheck, Activity, LogOut } from 'lucide-react';
 import { Button } from './components/ui/button';
 
 const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:8000' : '/api');
@@ -58,7 +58,7 @@ export default function App() {
             <ApprovalGuard>
               <ErrorBoundary>
                 <Layout signOut={signOut} profile={profile}>
-                  <AuditorPage session={session} profile={profile} apiUrl={API_URL} />
+                  <ComplianceHubPage session={session} profile={profile} apiUrl={API_URL} />
                 </Layout>
               </ErrorBoundary>
             </ApprovalGuard>
@@ -123,24 +123,26 @@ const Layout: React.FC<{ children: React.ReactNode, signOut: () => void, profile
                 href="/"
                 className={`flex items-center gap-2 transition-colors ${currentPath === '/' ? 'text-[#2C2A28]' : 'text-[#8F837A] hover:text-[#2C2A28]'}`}
               >
-                <LayoutDashboard className="w-4 h-4" />
-                Auditor
-              </a>
-              <a
-                href="/usage"
-                className={`flex items-center gap-2 transition-colors ${currentPath === '/usage' ? 'text-[#2C2A28]' : 'text-[#8F837A] hover:text-[#2C2A28]'}`}
-              >
-                <Activity className="w-4 h-4" />
-                Audit Logs
+                <ShieldCheck className="w-4 h-4" />
+                Compliance Hub
               </a>
               {profile?.role === 'admin' && (
-                <a
-                  href="/admin"
-                  className={`flex items-center gap-2 transition-colors ${currentPath === '/admin' ? 'text-[#2C2A28]' : 'text-[#8F837A] hover:text-[#2C2A28]'}`}
-                >
-                  <ShieldCheck className="w-4 h-4" />
-                  Admin
-                </a>
+                <>
+                  <a
+                    href="/usage"
+                    className={`flex items-center gap-2 transition-colors ${currentPath === '/usage' ? 'text-[#2C2A28]' : 'text-[#8F837A] hover:text-[#2C2A28]'}`}
+                  >
+                    <Activity className="w-4 h-4" />
+                    Usage Analytics
+                  </a>
+                  <a
+                    href="/admin"
+                    className={`flex items-center gap-2 transition-colors ${currentPath === '/admin' ? 'text-[#2C2A28]' : 'text-[#8F837A] hover:text-[#2C2A28]'}`}
+                  >
+                    <ShieldCheck className="w-4 h-4" />
+                    Admin
+                  </a>
+                </>
               )}
             </div>
 
