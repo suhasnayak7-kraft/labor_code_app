@@ -23,11 +23,11 @@ async def health_check():
             "cwd": os.getcwd()
         }
     except Exception as e:
+        print(f"[HEALTH CHECK ERROR] {traceback.format_exc()}")
         return {
             "status": "error",
             "backend_import": "failed",
-            "error": str(e),
-            "traceback": traceback.format_exc()
+            "error": "Backend initialization failed."
         }
 
 # Try to mount the real backend
@@ -45,8 +45,5 @@ except Exception as e:
             
         return JSONResponse(
             status_code=500,
-            content={
-                "detail": f"Backend Import Failure: {str(e)}",
-                "traceback": import_err[:1000]
-            }
+            content={"detail": "Service temporarily unavailable. Check server logs."}
         )

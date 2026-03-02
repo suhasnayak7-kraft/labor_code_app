@@ -40,7 +40,7 @@ FALLBACK_MODEL = "gemini-1.5-flash"
 
 app = FastAPI(title="Labour Code Auditor API")
 
-# Configure CORS - allow localhost for dev and all Vercel deployments for prod
+# Configure CORS - allow localhost for dev and specific Vercel deployment for prod
 origins = [
     "http://localhost:5173",
     "http://localhost:3000",
@@ -49,7 +49,7 @@ origins = [
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_origin_regex=r"https://.*\.vercel\.app",
+    allow_origin_regex=r"https://labour-code-app.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -58,10 +58,10 @@ app.add_middleware(
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     err_msg = traceback.format_exc()
-    print(f"Global UI Error Catcher: {err_msg}")
+    print(f"[INTERNAL ERROR] {err_msg}")
     return JSONResponse(
         status_code=500,
-        content={"detail": f"Uncaught Python Error: {str(exc)} | Trace: {err_msg[:300]}"}
+        content={"detail": "An internal server error occurred. Please try again."}
     )
 
 class AuditResponse(BaseModel):
