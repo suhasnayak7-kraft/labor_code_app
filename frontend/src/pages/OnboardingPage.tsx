@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { ShieldCheck, Clock, LogOut } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
@@ -19,6 +19,12 @@ export const OnboardingPage: React.FC = () => {
         await signOut();
         navigate('/login', { replace: true });
     };
+
+    useEffect(() => {
+        if (profile?.is_approved) {
+            navigate('/', { replace: true });
+        }
+    }, [profile?.is_approved, navigate]);
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-[#F3F3F2] p-4 text-[#2C2A28]">

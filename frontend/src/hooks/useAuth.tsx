@@ -1,14 +1,18 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, createContext, useContext } from 'react';
 import { supabase } from '../lib/supabase';
 import { Profile } from '../types/auth';
 
-/**
- * useAuth Hook
- * 
- * Centralized authentication and profile management for the Labour Code application.
- * This hook ensures that security status (is_approved, role) is always up-to-date.
- */
-export function useAuth() {
+interface AuthContextType {
+    session: any;
+    profile: Profile | null;
+    loading: boolean;
+    refreshProfile: () => Promise<void>;
+    signOut: () => Promise<{ error: any }>;
+}
+
+const AuthContext = createContext<AuthContextType>({} as AuthContextType);
+
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [session, setSession] = useState<any>(null);
     const [profile, setProfile] = useState<Profile | null>(null);
     const [loading, setLoading] = useState(true);
@@ -152,17 +156,25 @@ export function useAuth() {
     /**
      * Refresh profile data manually (e.g., after an admin approval).
      */
-    const refreshProfile = () => {
+    const refreshProfile = async () => {
         if (session?.user?.id) {
-            return fetchProfile(session.user.id);
+            await fetchProfile(session.user.id);
         }
     };
 
-    return {
-        session,
-        profile,
-        loading,
-        refreshProfile,
-        signOut: () => supabase.auth.signOut(),
-    };
+    return (
+        <AuthContext.Provider value={{
+            session,
+            profile,
+            loading,
+            refreshProfile,
+            signOut: () => supabase.auth.signOut(),
+        }}>
+            {children}
+        </AuthContext.Provider>
+    );
+}
+
+export function useAuth() {
+    return useContext(AuthContext);
 }
