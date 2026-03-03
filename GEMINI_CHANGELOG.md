@@ -10,5 +10,6 @@ This file documents the changes made by the Gemini assistant.
 - **Reset Password Page**: Created `ResetPasswordPage.tsx` to handle the password update and redirect to login.
 
 ### Fixed
+- **Onboarding Flash on Login**: Modified the `useAuth.tsx` hook to explicitly set `loading` back to `true` momentarily during sign-in while the `profile` object is fetching. This safely prevents the Router from prematurely directing the user to the `OnboardingPage` "Approval Pending" screen while their profile data is in transit.
 - **Admin User Approval**: Corrected the logic in `handleApproveCreation` on `AdminPage.tsx`. Instead of incorrectly creating a new user with a password via the API, it now correctly updates the existing authenticated user's `is_approved` status in the `profiles` table.
 
