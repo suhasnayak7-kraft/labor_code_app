@@ -206,15 +206,35 @@ export function AdminPage({ session, adminProfile }: { session: any, adminProfil
     const fetchKbFiles = async () => {
         setIsLoadingFiles(true);
         try {
-            const res = await fetch(`${API_URL}/admin/knowledge-base/files`, {
-                headers: { 'Authorization': `Bearer ${session.access_token}` }
-            });
-            if (res.ok) {
-                const data = await res.json();
-                setKbFiles(data);
+            // Fetch directly from labour_laws table instead of potentially unreachable backend endpoint
+            const { data, error } = await supabase
+                .from('labour_laws')
+                .select('filename, tool_id');
+
+            if (error) throw error;
+
+            if (data) {
+                // Deduplicate by filename + tool_id pair
+                const filesMap = new Map();
+                data.forEach(row => {
+                    const fname = row.filename;
+                    const tid = row.tool_id;
+                    if (!fname) return;
+
+                    const key = `${tid}:${fname}`;
+                    if (!filesMap.has(key)) {
+                        filesMap.set(key, {
+                            filename: fname,
+                            tool_id: tid
+                        });
+                    }
+                });
+
+                setKbFiles(Array.from(filesMap.values()));
             }
         } catch (e) {
             console.error("Fetch KB files error:", e);
+            toast.error("Failed to fetch database repository files.");
         }
         setIsLoadingFiles(false);
     };
