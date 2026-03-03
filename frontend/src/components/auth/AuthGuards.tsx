@@ -37,7 +37,7 @@ export const ApprovalGuard: React.FC<{ children: React.ReactNode }> = ({ childre
 
     console.log('[ApprovalGuard] Profile loaded:', { profile: profile?.id, is_approved: profile?.is_approved });
 
-    if (!profile?.is_approved) {
+    if (!profile?.is_approved && profile?.role !== 'admin') {
         console.log('[ApprovalGuard] User not approved, redirecting to /onboarding');
         return <Navigate to="/onboarding" replace />;
     }

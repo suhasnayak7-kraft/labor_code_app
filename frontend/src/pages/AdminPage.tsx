@@ -9,7 +9,7 @@ import { Badge } from '../components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "../components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "../components/ui/alert-dialog";
-import { Shield, Lock, Unlock, Mail, Loader2, UserX, UserCheck, Activity, KeyRound, Save, Eye, EyeOff, Zap, Clock, Users, AlertCircle, FileText, FileCheck, Calculator, FolderOpen, CalendarDays, AlertTriangle, TrendingUp, Upload, Database, CheckCircle2, XCircle } from 'lucide-react';
+import { Shield, Lock, Unlock, Mail, Loader2, UserX, UserCheck, Activity, KeyRound, Save, Eye, EyeOff, Zap, Clock, Users, AlertCircle, FileText, FileCheck, Calculator, FolderOpen, CalendarDays, AlertTriangle, TrendingUp, Upload, Database, CheckCircle2, XCircle, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 
@@ -113,6 +113,10 @@ export function AdminPage({ session, adminProfile }: { session: any, adminProfil
     const [isIngesting, setIsIngesting] = useState(false);
     const [ingestResult, setIngestResult] = useState<{ success: boolean; chunks: number; filename: string } | null>(null);
     const mdFileRef = useRef<HTMLInputElement>(null);
+    const [kbFiles, setKbFiles] = useState<{ filename: string; tool_id: string }[]>([]);
+    const [isLoadingFiles, setIsLoadingFiles] = useState(false);
+    const [fileToDelete, setFileToDelete] = useState<{ filename: string; tool_id: string } | null>(null);
+    const [toolToActivate, setToolToActivate] = useState<string | null>(null);
 
     // Tool icon map
     const toolIconMap: Record<string, React.ReactNode> = {
@@ -160,6 +164,15 @@ export function AdminPage({ session, adminProfile }: { session: any, adminProfil
                 toast.success(`"${mdFile.name}" ingested — ${data.chunks_ingested} chunks added to knowledge base.`);
                 setMdFile(null);
                 if (mdFileRef.current) mdFileRef.current.value = '';
+
+                // Fetch updated file list
+                fetchKbFiles();
+
+                // Tool activation check
+                const tool = toolConfigs.find(t => t.id === uploadToolId);
+                if (tool && tool.status === 'coming_soon') {
+                    setToolToActivate(uploadToolId);
+                }
             } else {
                 setIngestResult({ success: false, chunks: 0, filename: mdFile.name });
                 toast.error(data.detail || 'Ingestion failed.');
@@ -168,6 +181,56 @@ export function AdminPage({ session, adminProfile }: { session: any, adminProfil
             toast.error('Error connecting to backend.');
         }
         setIsIngesting(false);
+    };
+
+    const fetchKbFiles = async () => {
+        setIsLoadingFiles(true);
+        try {
+            const res = await fetch(`${API_URL}/admin/knowledge-base/files`, {
+                headers: { 'Authorization': `Bearer ${session.access_token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setKbFiles(data);
+            }
+        } catch (e) {
+            console.error("Fetch KB files error:", e);
+        }
+        setIsLoadingFiles(false);
+    };
+
+    const handleDeleteKbFile = async (tid: string, fname: string) => {
+        try {
+            const res = await fetch(`${API_URL}/admin/knowledge-base/files?tool_id=${tid}&filename=${encodeURIComponent(fname)}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${session.access_token}` }
+            });
+
+            if (res.ok) {
+                toast.success(`Deleted file "${fname}"`);
+                fetchKbFiles();
+                setFileToDelete(null);
+            } else {
+                toast.error("Failed to delete file.");
+            }
+        } catch (e) {
+            toast.error("Error deleting file.");
+        }
+    };
+
+    const activateTool = async (toolId: string) => {
+        const { error } = await supabase
+            .from('tool_config')
+            .update({ status: 'live' })
+            .eq('id', toolId);
+
+        if (!error) {
+            setToolConfigs(prev => prev.map(t => t.id === toolId ? { ...t, status: 'live' } : t));
+            toast.success(`Tool "${toolId}" is now LIVE!`);
+        } else {
+            toast.error("Failed to activate tool.");
+        }
+        setToolToActivate(null);
     };
 
     const fetchData = async () => {
@@ -229,8 +292,9 @@ export function AdminPage({ session, adminProfile }: { session: any, adminProfil
             if (toolData) setToolConfigs(toolData as ToolConfig[]);
             if (planData) setPlanConfigs(planData as PlanConfig[]);
 
-            // Fetch model stats in parallel too (non-blocking for UI)
+            // Fetch model stats and KB files in parallel too (non-blocking for UI)
             fetchStats();
+            fetchKbFiles();
         } catch (err) {
             console.error("fetchData error:", err);
             toast.error("Failed to load admin data.");
@@ -1511,10 +1575,233 @@ export function AdminPage({ session, adminProfile }: { session: any, adminProfil
                                 </CardContent>
                             </Card>
                         </div>
-                    </TabsContent>
 
+                        {/* MANAGE FILES SECTION */}
+                        <div className="mt-8">
+                            <div className="mb-4">
+                                <h2 className="font-serif text-xl tracking-tight text-[#2C2A28]">Manage Data Repository</h2>
+                                <p className="text-[13px] text-[#8F837A] mt-1">Review and manage documentation active in each tool's knowledge base.</p>
+                            </div>
+
+                            <Card className="bg-[#FFFFFC] border-[#E6E4E0] shadow-[0_1px_3px_rgba(95,87,80,0.07)]">
+                                <CardHeader className="pb-3 border-b border-[#E6E4E0]">
+                                    <div className="flex items-center justify-between">
+                                        <CardTitle className="text-[15px] font-medium text-[#2C2A28] flex items-center gap-2">
+                                            <FolderOpen size={16} className="text-[#606C5A]" />
+                                            Active Knowledge Base Files
+                                        </CardTitle>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-8 text-[12px] text-[#606C5A]"
+                                            onClick={fetchKbFiles}
+                                            disabled={isLoadingFiles}
+                                        >
+                                            {isLoadingFiles ? <Loader2 size={14} className="animate-spin mr-1" /> : <Activity size={14} className="mr-1" />}
+                                            Refresh List
+                                        </Button>
+                                    </div>
+                                </CardHeader>
+                                <CardContent className="p-0">
+                                    <Table>
+                                        <TableHeader className="bg-[#F9F9F8]">
+                                            <TableRow className="border-[#E6E4E0]">
+                                                <TableHead className="text-[11px] font-semibold text-[#8F837A] uppercase tracking-wider py-3 px-4">Tool Context</TableHead>
+                                                <TableHead className="text-[11px] font-semibold text-[#8F837A] uppercase tracking-wider py-3">Filename</TableHead>
+                                                <TableHead className="text-right text-[11px] font-semibold text-[#8F837A] uppercase tracking-wider py-3 px-4">Actions</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody className="text-[13px]">
+                                            {isLoadingFiles ? (
+                                                <TableRow>
+                                                    <TableCell colSpan={3} className="text-center py-10">
+                                                        <Loader2 size={24} className="animate-spin mx-auto text-[#C0B4A8] mb-2" />
+                                                        <p className="text-[#8F837A]">Loading catalog...</p>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ) : kbFiles.length === 0 ? (
+                                                <TableRow>
+                                                    <TableCell colSpan={3} className="text-center py-10">
+                                                        <Database size={24} className="mx-auto text-[#C0B4A8] mb-2" />
+                                                        <p className="text-[#8F837A]">No files uploaded yet.</p>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ) : (
+                                                kbFiles.map((file, idx) => {
+                                                    const tool = toolConfigs.find(t => t.id === file.tool_id);
+                                                    return (
+                                                        <TableRow key={`${file.tool_id}-${file.filename}-${idx}`} className="border-[#E6E4E0] hover:bg-[#F9F9F8]/50 transition-colors">
+                                                            <TableCell className="py-4 px-4">
+                                                                <Badge variant="outline" className="text-[10px] font-medium bg-[#ECF0E8] text-[#606C5A] border-none px-2 whitespace-nowrap">
+                                                                    {tool?.name || file.tool_id}
+                                                                </Badge>
+                                                            </TableCell>
+                                                            <TableCell className="font-medium text-[#2C2A28]">
+                                                                <div className="flex items-center gap-2">
+                                                                    <FileText size={14} className="text-[#8F837A]" />
+                                                                    {file.filename}
+                                                                </div>
+                                                            </TableCell>
+                                                            <TableCell className="text-right py-4 px-4">
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="h-8 w-8 text-[#8B4A42] hover:bg-[#F5ECEA] hover:text-[#8B4A42] rounded-md"
+                                                                    onClick={() => setFileToDelete(file)}
+                                                                >
+                                                                    <Trash2 size={14} />
+                                                                </Button>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    );
+                                                })
+                                            )}
+                                        </TableBody>
+                                    </Table>
+                                </CardContent>
+                            </Card>
+                        </div>
+
+                        {/* MANAGE FILES SECTION */}
+                        <div className="mt-8">
+                            <div className="mb-4">
+                                <h2 className="font-serif text-xl tracking-tight text-[#2C2A28]">Manage Data Repository</h2>
+                                <p className="text-[13px] text-[#8F837A] mt-1">Review and manage documentation active in each tool's knowledge base.</p>
+                            </div>
+
+                            <Card className="bg-[#FFFFFC] border-[#E6E4E0] shadow-[0_1px_3px_rgba(95,87,80,0.07)]">
+                                <CardHeader className="pb-3 border-b border-[#E6E4E0]">
+                                    <div className="flex items-center justify-between">
+                                        <CardTitle className="text-[15px] font-medium text-[#2C2A28] flex items-center gap-2">
+                                            <FolderOpen size={16} className="text-[#606C5A]" />
+                                            Active Knowledge Base Files
+                                        </CardTitle>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-8 text-[12px] text-[#606C5A]"
+                                            onClick={fetchKbFiles}
+                                            disabled={isLoadingFiles}
+                                        >
+                                            {isLoadingFiles ? <Loader2 size={14} className="animate-spin mr-1" /> : <Activity size={14} className="mr-1" />}
+                                            Refresh List
+                                        </Button>
+                                    </div>
+                                </CardHeader>
+                                <CardContent className="p-0">
+                                    <Table>
+                                        <TableHeader className="bg-[#F9F9F8]">
+                                            <TableRow className="border-[#E6E4E0]">
+                                                <TableHead className="text-[11px] font-semibold text-[#8F837A] uppercase tracking-wider py-3 px-4">Tool Context</TableHead>
+                                                <TableHead className="text-[11px] font-semibold text-[#8F837A] uppercase tracking-wider py-3">Filename</TableHead>
+                                                <TableHead className="text-right text-[11px] font-semibold text-[#8F837A] uppercase tracking-wider py-3 px-4">Actions</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody className="text-[13px]">
+                                            {isLoadingFiles ? (
+                                                <TableRow>
+                                                    <TableCell colSpan={3} className="text-center py-10">
+                                                        <Loader2 size={24} className="animate-spin mx-auto text-[#C0B4A8] mb-2" />
+                                                        <p className="text-[#8F837A]">Loading catalog...</p>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ) : kbFiles.length === 0 ? (
+                                                <TableRow>
+                                                    <TableCell colSpan={3} className="text-center py-10">
+                                                        <Database size={24} className="mx-auto text-[#C0B4A8] mb-2" />
+                                                        <p className="text-[#8F837A]">No files uploaded yet.</p>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ) : (
+                                                kbFiles.map((file, idx) => {
+                                                    const tool = toolConfigs.find(t => t.id === file.tool_id);
+                                                    return (
+                                                        <TableRow key={`${file.tool_id}-${file.filename}-${idx}`} className="border-[#E6E4E0] hover:bg-[#F9F9F8]/50 transition-colors">
+                                                            <TableCell className="py-4 px-4">
+                                                                <Badge variant="outline" className="text-[10px] font-medium bg-[#ECF0E8] text-[#606C5A] border-none px-2 whitespace-nowrap">
+                                                                    {tool?.name || file.tool_id}
+                                                                </Badge>
+                                                            </TableCell>
+                                                            <TableCell className="font-medium text-[#2C2A28]">
+                                                                <div className="flex items-center gap-2">
+                                                                    <FileText size={14} className="text-[#8F837A]" />
+                                                                    {file.filename}
+                                                                </div>
+                                                            </TableCell>
+                                                            <TableCell className="text-right py-4 px-4">
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="h-8 w-8 text-[#8B4A42] hover:bg-[#F5ECEA] hover:text-[#8B4A42] rounded-md"
+                                                                    onClick={() => setFileToDelete(file)}
+                                                                >
+                                                                    <Trash2 size={14} />
+                                                                </Button>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    );
+                                                })
+                                            )}
+                                        </TableBody>
+                                    </Table>
+                                </CardContent>
+                            </Card>
+                        </div>
+                    </TabsContent>
                 </div>
             </Tabs>
+
+            {/* DELETION CONFIRMATION DIALOG */}
+            <AlertDialog open={!!fileToDelete} onOpenChange={(open) => !open && setFileToDelete(null)}>
+                <AlertDialogContent className="bg-[#FFFFFC] border-[#E6E4E0]">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="text-[#2C2A28] flex items-center gap-2">
+                            <AlertTriangle className="text-[#8B4A42]" size={20} />
+                            Confirm File Deletion
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="text-[#5E5E5E]">
+                            Are you sure you want to delete <strong className="text-[#2C2A28]">"{fileToDelete?.filename}"</strong> from the <strong className="text-[#2C2A28]">{toolConfigs.find(t => t.id === fileToDelete?.tool_id)?.name}</strong> knowledge base?
+                            <br /><br />
+                            This will remove all associated AI context chunks. This action cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter className="gap-2">
+                        <AlertDialogCancel className="border-[#E6E4E0] text-[#5E5E5E] hover:bg-[#F3F3F2]">Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            className="bg-[#8B4A42] hover:bg-[#7A3E38] text-white"
+                            onClick={() => fileToDelete && handleDeleteKbFile(fileToDelete.tool_id, fileToDelete.filename)}
+                        >
+                            Delete File
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {/* TOOL ACTIVATION DIALOG */}
+            <AlertDialog open={!!toolToActivate} onOpenChange={(open) => !open && setToolToActivate(null)}>
+                <AlertDialogContent className="bg-[#FFFFFC] border-[#E6E4E0]">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="text-[#2C2A28] flex items-center gap-2">
+                            <Zap className="text-[#606C5A]" size={20} />
+                            Activate Tool?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="text-[#5E5E5E]">
+                            You've uploaded knowledge base data for <strong className="text-[#2C2A28]">"{toolConfigs.find(t => t.id === toolToActivate)?.name}"</strong> which is currently marked as "Coming Soon".
+                            <br /><br />
+                            Would you like to activate this tool and make it LIVE for all users now?
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter className="gap-2">
+                        <AlertDialogCancel className="border-[#E6E4E0] text-[#5E5E5E] hover:bg-[#F3F3F2]">Keep Coming Soon</AlertDialogCancel>
+                        <AlertDialogAction
+                            className="bg-[#606C5A] hover:bg-[#4F5A4A] text-white"
+                            onClick={() => toolToActivate && activateTool(toolToActivate)}
+                        >
+                            Activate Now
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

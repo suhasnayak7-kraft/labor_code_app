@@ -1,4 +1,4 @@
-import React, { useState, useEffect, createContext, useContext } from 'react';
+import React, { useState, useEffect, createContext, useContext, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { Profile } from '../types/auth';
 
@@ -14,8 +14,14 @@ const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [session, setSession] = useState<any>(null);
-    const [profile, setProfile] = useState<Profile | null>(null);
+    const [profile, setProfileState] = useState<Profile | null>(null);
+    const profileRef = useRef<Profile | null>(null);
     const [loading, setLoading] = useState(true);
+
+    const setProfile = (p: Profile | null) => {
+        profileRef.current = p;
+        setProfileState(p);
+    };
 
     useEffect(() => {
         let isMounted = true;
@@ -89,7 +95,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (isMounted) {
                 // If a user signs in, or we get a session but don't have a profile yet, set loading to true
                 // to prevent components like ApprovalGuard from redirecting prematurely.
-                if (event === 'SIGNED_IN' || (session && !profile)) {
+                if (event === 'SIGNED_IN' || (session && !profileRef.current)) {
                     setLoading(true);
                 }
 
@@ -152,7 +158,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
         } catch (err: any) {
             console.error('[Auth] Error fetching security profile:', err?.message || err);
-            setProfile(null);
+            // Do not wipe the profile on a temporary network error if we already have one
         } finally {
             clearTimeout(profileTimeout);
             setLoading(false);

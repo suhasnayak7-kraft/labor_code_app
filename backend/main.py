@@ -519,7 +519,10 @@ async def ingest_markdown(
 
         # 5. Fast Batch Insert to Supabase
         ingested = 0
-        rows_to_insert = [{"content": chunk, "embedding": emb, "tool_id": tool_id} for chunk, emb in zip(chunks, embeddings)]
+        rows_to_insert = [
+            {"content": chunk, "embedding": emb, "tool_id": tool_id, "filename": file.filename} 
+            for chunk, emb in zip(chunks, embeddings)
+        ]
         
         # Insert in chunks of 50 to avoid payload size limits to Postgres
         for i in range(0, len(rows_to_insert), 50):
@@ -579,3 +582,61 @@ async def get_admin_stats(user = Depends(get_current_user)):
         })
 
     return {"models": stats}
+
+@app.get("/admin/knowledge-base/files")
+async def list_kb_files(admin_user = Depends(get_current_user)):
+    """List unique files in the knowledge base grouped by tool_id."""
+    # 1. Verify admin
+    profile_res = supabase.table("profiles").select("role").eq("id", admin_user.id).single().execute()
+    if not profile_res.data or profile_res.data.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required.")
+
+    try:
+        # Fetch only filename and tool_id
+        res = supabase.table("labour_laws").select("filename, tool_id").execute()
+        
+        if not res.data:
+            return []
+            
+        # Deduplicate in Python (Supabase JS/Py doesn't have a simple DISTINCT for multiple columns)
+        files_map = {}
+        for row in res.data:
+            fname = row.get("filename")
+            tid = row.get("tool_id")
+            if not fname: continue
+            
+            key = f"{tid}:{fname}"
+            if key not in files_map:
+                files_map[key] = {
+                    "filename": fname,
+                    "tool_id": tid
+                }
+        
+        return list(files_map.values())
+    except Exception as e:
+        print(f"List KB files error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to list knowledge base files.")
+
+@app.delete("/admin/knowledge-base/files")
+async def delete_kb_file(
+    tool_id: str = Query(...), 
+    filename: str = Query(...), 
+    admin_user = Depends(get_current_user)
+):
+    """Delete all knowledge base chunks for a specific file and tool."""
+    # 1. Verify admin
+    profile_res = supabase.table("profiles").select("role").eq("id", admin_user.id).single().execute()
+    if not profile_res.data or profile_res.data.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required.")
+
+    try:
+        # Delete all records matching BOTH tool_id and filename
+        supabase.table("labour_laws").delete()\
+            .eq("tool_id", tool_id)\
+            .eq("filename", filename)\
+            .execute()
+            
+        return {"success": True, "message": f"Deleted file '{filename}' from tool '{tool_id}'"}
+    except Exception as e:
+        print(f"Delete KB file error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to delete knowledge base file.")
