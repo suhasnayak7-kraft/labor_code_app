@@ -2,8 +2,13 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
-import { Mail, Building, Briefcase, Shield, ArrowLeft } from 'lucide-react';
+import { Switch } from '../components/ui/switch';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
+import { Mail, Building, Briefcase, Shield, ArrowLeft, Image as ImageIcon, CheckCircle2, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
+import { useState, useEffect } from 'react';
 
 interface ProfilePageProps {
     session: any;
@@ -12,6 +17,43 @@ interface ProfilePageProps {
 
 export const ProfilePage: React.FC<ProfilePageProps> = ({ session, profile }) => {
     const navigate = useNavigate();
+
+    // Branding States
+    const [companyLogo, setCompanyLogo] = useState(profile?.company_logo || '');
+    const [brandingEnabled, setBrandingEnabled] = useState(profile?.branding_enabled || false);
+    const [isSavingBranding, setIsSavingBranding] = useState(false);
+    const [saveSuccess, setSaveSuccess] = useState(false);
+
+    useEffect(() => {
+        if (profile) {
+            setCompanyLogo(profile.company_logo || '');
+            setBrandingEnabled(profile.branding_enabled || false);
+        }
+    }, [profile]);
+
+    const saveBrandingSettings = async () => {
+        if (!session?.user?.id) return;
+
+        setIsSavingBranding(true);
+        setSaveSuccess(false);
+        try {
+            const { error } = await supabase
+                .from('profiles')
+                .update({
+                    company_logo: companyLogo,
+                    branding_enabled: brandingEnabled
+                })
+                .eq('id', session.user.id);
+
+            if (error) throw error;
+            setSaveSuccess(true);
+            setTimeout(() => setSaveSuccess(false), 3000);
+        } catch (error) {
+            console.error('Failed to save branding settings:', error);
+        } finally {
+            setIsSavingBranding(false);
+        }
+    };
 
     const getUserInitials = () => {
         const name = profile?.full_name || profile?.email || '';
@@ -209,6 +251,72 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ session, profile }) =>
                     </div>
                 </CardContent>
             </Card>
+
+            {/* Custom Branding Settings (Pro & Enterprise only) */}
+            {currentPlan !== 'Free' && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <ImageIcon className="w-5 h-5" />
+                            Custom Branding
+                        </CardTitle>
+                        <CardDescription>
+                            Configure how your company appears on PDF audit reports.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                        <div className="flex items-center justify-between">
+                            <div className="space-y-0.5">
+                                <Label className="text-base font-semibold text-[#2C2A28]">Enable Custom Branding</Label>
+                                <p className="text-sm text-[#5E5E5E]">
+                                    Show your logo and company details on generated PDFs.
+                                </p>
+                            </div>
+                            <Switch
+                                checked={brandingEnabled}
+                                onCheckedChange={setBrandingEnabled}
+                            />
+                        </div>
+
+                        <div className="space-y-2 pt-4 border-t border-[#E6E4E0]">
+                            <Label htmlFor="logo-url" className="text-sm font-semibold text-[#8F837A] uppercase tracking-wider">Company Logo URL</Label>
+                            <Input
+                                id="logo-url"
+                                placeholder="https://example.com/logo.png"
+                                value={companyLogo}
+                                onChange={(e) => setCompanyLogo(e.target.value)}
+                                disabled={!brandingEnabled}
+                                className="w-full"
+                            />
+                            <p className="text-xs text-[#5E5E5E] mt-1">Provide a direct link to your company logo (PNG or JPEG format recommended).</p>
+                        </div>
+
+                        <div className="flex items-center gap-3 pt-2">
+                            <Button
+                                onClick={saveBrandingSettings}
+                                disabled={isSavingBranding}
+                                className="bg-[#606C5A] hover:bg-[#4A5747] text-white"
+                            >
+                                {isSavingBranding ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                        Saving...
+                                    </>
+                                ) : (
+                                    'Save Branding Settings'
+                                )}
+                            </Button>
+
+                            {saveSuccess && (
+                                <span className="flex items-center text-sm text-green-600">
+                                    <CheckCircle2 className="w-4 h-4 mr-1" />
+                                    Saved successfully
+                                </span>
+                            )}
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
 
             {/* Upgrade Section */}
             {currentPlan === 'Free' && (

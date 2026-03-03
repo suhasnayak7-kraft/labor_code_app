@@ -200,6 +200,20 @@ async def audit_policy(
         file_bytes = await file.read()
         if len(file_bytes) > 20 * 1024 * 1024:  # 20MB guard
             raise HTTPException(status_code=400, detail="File too large. Maximum file size is 20MB.")
+            
+        # File Hash Caching Check to prevent redundant API calls
+        file_hash = hashlib.sha256(file_bytes).hexdigest()
+        cached_log_res = supabase.table("api_logs").select("*").eq("user_id", user.id).eq("filename", file_hash).order("created_at", desc=True).limit(1).execute()
+        if cached_log_res.data:
+            cached = cached_log_res.data[0]
+            # Provide the cached analysis skipping AI model load entirely
+            return AuditResponse(
+                compliance_score=cached.get("compliance_score", 50),
+                findings=cached.get("findings", []),
+                model_id=f"cached-{cached.get('model_id', 'unknown')}",
+                provider="cache",
+                response_time_ms=0
+            )
 
         try:
             if file.filename.lower().endswith('.pdf'):
@@ -348,14 +362,12 @@ Return ONLY a raw JSON object (no markdown, no code fences) in this exact schema
         resp_time_ms = int((end_time - start_time) * 1000)
 
         # 5. Save usage metadata to API logs
-        hashed_filename = hashlib.sha256(file.filename.encode()).hexdigest()[:16]
-        
         supabase.table("api_logs").insert({
             "endpoint": "/audit",
             "prompt_tokens": p_tokens,
             "completion_tokens": c_tokens,
             "total_tokens": t_tokens,
-            "filename": hashed_filename,
+            "filename": file_hash,
             "compliance_score": comp_score,
             "user_id": user.id,
             "findings": findings,
