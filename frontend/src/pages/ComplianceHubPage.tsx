@@ -34,7 +34,9 @@ export const ComplianceHubPage: React.FC<ComplianceHubPageProps> = ({ profile })
 
     React.useEffect(() => {
         const fetchTools = async () => {
-            setLoading(true);
+            if (tools.length === 0) {
+                setLoading(true);
+            }
             try {
                 const { data, error } = await supabase
                     .from('tool_config')

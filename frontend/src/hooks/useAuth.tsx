@@ -14,13 +14,21 @@ const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [session, setSession] = useState<any>(null);
-    const [profile, setProfileState] = useState<Profile | null>(null);
+    const [profile, setProfileState] = useState<Profile | null>(() => {
+        const cached = localStorage.getItem('sb_profile');
+        return cached ? JSON.parse(cached) : null;
+    });
     const profileRef = useRef<Profile | null>(null);
     const [loading, setLoading] = useState(true);
 
     const setProfile = (p: Profile | null) => {
         profileRef.current = p;
         setProfileState(p);
+        if (p) {
+            localStorage.setItem('sb_profile', JSON.stringify(p));
+        } else {
+            localStorage.removeItem('sb_profile');
+        }
     };
 
     useEffect(() => {
@@ -93,8 +101,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // 3. Listen for Auth Changes (Sign In, Sign Out, Token Refresh)
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
             if (isMounted) {
-                // If a user signs in, or we get a session but don't have a profile yet, set loading to true
-                // to prevent components like ApprovalGuard from redirecting prematurely.
+                console.log(`[Auth] Auth change detected: ${event}`);
+
+                // Only set loading to true for initial sign-in or if we truly have no data.
+                // Avoid setting loading to true for TOKEN_REFRESHED if we already have a profile.
                 if (event === 'SIGNED_IN' || (session && !profileRef.current)) {
                     setLoading(true);
                 }

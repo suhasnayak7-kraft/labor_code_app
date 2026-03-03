@@ -254,7 +254,10 @@ export function AdminPage({ session, adminProfile }: { session: any, adminProfil
     };
 
     const fetchData = async () => {
-        setLoading(true);
+        // Only show full-page loader if we have no data yet
+        if (profiles.length === 0 && toolConfigs.length === 0) {
+            setLoading(true);
+        }
         try {
             // ✅ Run ALL queries in parallel — no sequential awaits
             const [
@@ -400,20 +403,27 @@ export function AdminPage({ session, adminProfile }: { session: any, adminProfil
         }
     };
 
-    const updatePlanConfig = async (planId: string, field: string, value: string | number | boolean) => {
+    const updatePlanConfig = async (planId: string, updates: Partial<PlanConfig>) => {
         setIsSavingPlan(planId);
-        const { error } = await supabase
-            .from('plan_config')
-            .update({ [field]: value })
-            .eq('id', planId);
+        try {
+            const { error } = await supabase
+                .from('plan_config')
+                .update(updates)
+                .eq('id', planId);
 
-        if (!error) {
-            setPlanConfigs(prev => prev.map(p => p.id === planId ? { ...p, [field]: value } : p));
+            if (error) throw error;
+
+            setPlanConfigs(prev => prev.map(p => p.id === planId ? { ...p, ...updates } : p));
             toast.success('Plan updated.');
-        } else {
-            toast.error('Failed to update plan.');
+        } catch (e: any) {
+            console.error('Failed to update plan:', e);
+            toast.error(e.message || 'Failed to update plan.');
         }
         setIsSavingPlan(null);
+    };
+
+    const calculateAnnualPrice = (monthly: number, discount: number) => {
+        return Math.floor(monthly * 12 * (1 - (discount / 100)));
     };
 
     const fetchStats = async () => {
@@ -840,16 +850,23 @@ export function AdminPage({ session, adminProfile }: { session: any, adminProfil
                                                             type="number" min={0}
                                                             defaultValue={plan.price_monthly}
                                                             className="h-7 text-[12px] border-[#E6E4E0]"
-                                                            onBlur={e => { const v = parseInt(e.target.value, 10); if (!isNaN(v) && v !== plan.price_monthly) updatePlanConfig(plan.id, 'price_monthly', v); }}
+                                                            onBlur={e => {
+                                                                const v = parseInt(e.target.value, 10);
+                                                                if (!isNaN(v) && v !== plan.price_monthly) {
+                                                                    const annual = calculateAnnualPrice(v, plan.discount_percentage);
+                                                                    updatePlanConfig(plan.id, { price_monthly: v, price_annual: annual });
+                                                                }
+                                                            }}
                                                         />
                                                     </div>
                                                     <div className="flex items-center gap-2">
                                                         <span className="text-[11px] text-[#8F837A] w-24 shrink-0">Annual (₹)</span>
                                                         <Input
                                                             type="number" min={0}
-                                                            defaultValue={plan.price_annual}
-                                                            className="h-7 text-[12px] border-[#E6E4E0]"
-                                                            onBlur={e => { const v = parseInt(e.target.value, 10); if (!isNaN(v) && v !== plan.price_annual) updatePlanConfig(plan.id, 'price_annual', v); }}
+                                                            value={plan.price_annual}
+                                                            readOnly
+                                                            className="h-7 text-[12px] border-[#E6E4E0] bg-[#F3F3F2] cursor-not-allowed"
+                                                            title="Auto-calculated based on monthly price and discount"
                                                         />
                                                     </div>
 
@@ -859,7 +876,7 @@ export function AdminPage({ session, adminProfile }: { session: any, adminProfil
                                                             type="text"
                                                             defaultValue={plan.description}
                                                             className="h-7 text-[12px] border-[#E6E4E0]"
-                                                            onBlur={e => { if (e.target.value !== plan.description) updatePlanConfig(plan.id, 'description', e.target.value); }}
+                                                            onBlur={e => { if (e.target.value !== plan.description) updatePlanConfig(plan.id, { description: e.target.value }); }}
                                                         />
                                                     </div>
                                                 </div>
@@ -903,9 +920,15 @@ export function AdminPage({ session, adminProfile }: { session: any, adminProfil
                                                             <label className="text-[10px] font-bold uppercase tracking-wider text-[#8F837A]">Discount %</label>
                                                             <Input
                                                                 type="number"
-                                                                value={plan.discount_percentage}
-                                                                onChange={e => updatePlanConfig(plan.id, 'discount_percentage', parseInt(e.target.value))}
-                                                                className="h-8 text-[12px]"
+                                                                defaultValue={plan.discount_percentage}
+                                                                onBlur={e => {
+                                                                    const v = parseInt(e.target.value);
+                                                                    if (!isNaN(v) && v !== plan.discount_percentage) {
+                                                                        const annual = calculateAnnualPrice(plan.price_monthly, v);
+                                                                        updatePlanConfig(plan.id, { discount_percentage: v, price_annual: annual });
+                                                                    }
+                                                                }}
+                                                                className="h-8 text-[12px] border-[#E6E4E0] focus:ring-[#606C5A]"
                                                             />
                                                         </div>
                                                     </div>
@@ -1879,19 +1902,19 @@ export function AdminPage({ session, adminProfile }: { session: any, adminProfil
                             </Card>
                         </div>
 
-                        {/* MANAGE FILES SECTION */}
+                        {/* MANAGE DATABASE REPOSITORY SECTION */}
                         <div className="mt-8">
                             <div className="mb-4">
-                                <h2 className="font-serif text-xl tracking-tight text-[#2C2A28]">Manage Data Repository</h2>
-                                <p className="text-[13px] text-[#8F837A] mt-1">Review and manage documentation active in each tool's knowledge base.</p>
+                                <h2 className="font-serif text-xl tracking-tight text-[#2C2A28]">Manage Database Repository</h2>
+                                <p className="text-[13px] text-[#8F837A] mt-1">Review and manage active files in the knowledge base across all tools.</p>
                             </div>
 
                             <Card className="bg-[#FFFFFC] border-[#E6E4E0] shadow-[0_1px_3px_rgba(95,87,80,0.07)]">
                                 <CardHeader className="pb-3 border-b border-[#E6E4E0]">
                                     <div className="flex items-center justify-between">
                                         <CardTitle className="text-[15px] font-medium text-[#2C2A28] flex items-center gap-2">
-                                            <FolderOpen size={16} className="text-[#606C5A]" />
-                                            Active Knowledge Base Files
+                                            <Database size={16} className="text-[#606C5A]" />
+                                            Active Database Repository
                                         </CardTitle>
                                         <Button
                                             variant="ghost"

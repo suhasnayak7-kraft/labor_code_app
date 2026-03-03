@@ -72,7 +72,9 @@ export const LabourAuditPage: React.FC<LabourAuditPageProps> = ({ session, profi
 
     const fetchLogs = async () => {
         if (!session?.access_token) return;
-        setLogsLoading(true);
+        if (logs.length === 0) {
+            setLogsLoading(true);
+        }
         try {
             const response = await fetch(`${apiUrl}/logs`, {
                 headers: {
