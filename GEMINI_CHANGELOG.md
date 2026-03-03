@@ -1,5 +1,7 @@
 # Gemini Developer Log
 
+> **Assistant Instructions**: After thoroughly completing a user prompt, the assistant MUST automatically run `git add . && git commit -m "..." && git push`. Then, in its final response, the assistant MUST provide the local testing link (e.g., `http://localhost:5173`) and the Vercel deployment link for easy testing.
+
 This file documents the changes made by the Gemini assistant.
 
 ## [2026-03-03]
