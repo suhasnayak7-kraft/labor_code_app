@@ -6,7 +6,7 @@ import time
 import hashlib
 from datetime import datetime
 from typing import Optional
-from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Header, Form, Request
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Header, Form, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import traceback
@@ -638,7 +638,7 @@ async def delete_kb_file(
     """Delete all knowledge base chunks for a specific file and tool."""
     # 1. Verify admin
     profile_res = supabase.table("profiles").select("role").eq("id", admin_user.id).single().execute()
-    if not profile_res.data or profile_res.data.get("role") != "admin":
+    if not profile_res.data or profile_res.data.get("role") not in ("ADMIN", "SUPER_ADMIN", "admin"):
         raise HTTPException(status_code=403, detail="Admin access required.")
 
     try:
