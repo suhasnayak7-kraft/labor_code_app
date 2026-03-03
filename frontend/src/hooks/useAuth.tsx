@@ -120,7 +120,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const profileTimeout = setTimeout(() => {
             console.warn('[Auth] Profile fetch timeout - setting loading to false');
             setLoading(false); // Don't wait forever for profile
-        }, 2000);
+        }, 8000);
 
         try {
             console.log('[Auth] Fetching profile for user:', userId);
