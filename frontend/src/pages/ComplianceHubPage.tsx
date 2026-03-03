@@ -15,6 +15,7 @@ interface ComplianceHubPageProps {
 export const ComplianceHubPage: React.FC<ComplianceHubPageProps> = ({ profile }) => {
     const navigate = useNavigate();
     const [tools, setTools] = React.useState<any[]>([]);
+    const [hasDataTools, setHasDataTools] = React.useState<Set<string>>(new Set());
     const [loading, setLoading] = React.useState(true);
 
     const isAdmin = profile?.role === 'ADMIN' || profile?.role === 'SUPER_ADMIN';
@@ -33,20 +34,32 @@ export const ComplianceHubPage: React.FC<ComplianceHubPageProps> = ({ profile })
     };
 
     React.useEffect(() => {
-        const fetchTools = async () => {
+        const fetchData = async () => {
             if (tools.length === 0) {
                 setLoading(true);
             }
             try {
-                const { data, error } = await supabase
+                // 1. Fetch tools
+                const { data: toolsData, error: toolsError } = await supabase
                     .from('tool_config')
                     .select('*')
                     .order('sort_order', { ascending: true });
 
-                if (error) throw error;
+                if (toolsError) throw toolsError;
 
-                if (data) {
-                    // Plan tier mapping
+                // 2. Fetch distinct tool_ids from labour_laws to check for verified data
+                const { data: lawsData, error: lawsError } = await supabase
+                    .from('labour_laws')
+                    .select('tool_id');
+
+                if (lawsError) throw lawsError;
+
+                if (lawsData) {
+                    const toolIdsWithData = new Set(lawsData.map((row: any) => row.tool_id));
+                    setHasDataTools(toolIdsWithData);
+                }
+
+                if (toolsData) {
                     const planTierMap: Record<string, number> = {
                         'free': 1,
                         'pro': 2,
@@ -54,30 +67,29 @@ export const ComplianceHubPage: React.FC<ComplianceHubPageProps> = ({ profile })
                     };
                     const userTier = planTierMap[profile?.plan?.toLowerCase()] || 1;
 
-                    // Admins see everything for testing. 
-                    // Regular users see only 'live' tools within their tier.
                     const filtered = isAdmin
-                        ? data
-                        : data.filter(t => t.status === 'live' && t.tier <= userTier);
+                        ? toolsData
+                        : toolsData.filter(t => t.status === 'live' && t.tier <= userTier);
 
                     setTools(filtered);
                 }
             } catch (e) {
                 console.error("Error fetching tools:", e);
+                toast.error("Failed to load tools repository.");
             }
             setLoading(false);
         };
 
-        fetchTools();
+        fetchData();
     }, [profile, isAdmin]);
 
     const handleToolClick = (tool: any) => {
-        // Admins can bypass the 'active' check for testing
-        if ((tool.status === 'live' || isAdmin) && (tool.id === 'labour-audit')) {
+        // Only labour-audit has a specialized page for now
+        if (tool.id === 'labour-audit') {
             navigate('/audit');
-        } else if (tool.status === 'live' || isAdmin) {
-            // Placeholder for other tools once paths are defined
-            toast.info(`Tool "${tool.name}" is being finalized.`);
+        } else {
+            // General placeholder for other tools
+            toast.info(`The specialized assistant for "${tool.name}" is being finalized, but the standard auditor is active.`);
         }
     };
 
@@ -98,7 +110,6 @@ export const ComplianceHubPage: React.FC<ComplianceHubPageProps> = ({ profile })
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {tools.map((tool) => {
-                        const isComingSoon = tool.status === 'coming_soon';
                         const isLive = tool.status === 'live';
                         const isAccessible = isLive || isAdmin;
 
@@ -126,9 +137,13 @@ export const ComplianceHubPage: React.FC<ComplianceHubPageProps> = ({ profile })
                                                 )}
                                             </CardTitle>
                                         </div>
-                                        {isComingSoon && !isAdmin && (
-                                            <Badge variant="outline" className="bg-[#F3F3F2] text-[#8F837A] border-[#E6E4E0] text-[10px] uppercase font-bold tracking-wider">
-                                                Coming Soon
+                                        {hasDataTools.has(tool.id) ? (
+                                            <Badge variant="outline" className="bg-[#ECF0E8] text-[#606C5A] border-[#DCE4D5] text-[10px] uppercase font-bold tracking-wider animate-pulse-subtle">
+                                                Verified Dataset
+                                            </Badge>
+                                        ) : (
+                                            <Badge variant="outline" className="bg-[#4E7A94]/10 text-[#4E7A94] border-[#4E7A94]/20 text-[10px] uppercase font-bold tracking-wider">
+                                                Early Access
                                             </Badge>
                                         )}
                                     </div>
