@@ -118,6 +118,10 @@ export const LabourAuditPage: React.FC<LabourAuditPageProps> = ({ session, profi
         const formData = new FormData();
         formData.append('file', file);
         formData.append('model_id', 'gemini-1.5-flash');
+        formData.append('tool_id', 'labour-audit');
+
+        // Check if dev environment to use local endpoint or deployed endpoint
+        const apiUrl = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:8000' : '/api');
 
         try {
             const response = await fetch(`${apiUrl}/audit`, {

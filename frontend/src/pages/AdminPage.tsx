@@ -109,6 +109,7 @@ export function AdminPage({ session, adminProfile }: { session: any, adminProfil
 
     // Data Repository state
     const [mdFile, setMdFile] = useState<File | null>(null);
+    const [uploadToolId, setUploadToolId] = useState('labour-audit');
     const [isIngesting, setIsIngesting] = useState(false);
     const [ingestResult, setIngestResult] = useState<{ success: boolean; chunks: number; filename: string } | null>(null);
     const mdFileRef = useRef<HTMLInputElement>(null);
@@ -146,6 +147,7 @@ export function AdminPage({ session, adminProfile }: { session: any, adminProfil
         try {
             const formData = new FormData();
             formData.append('file', mdFile);
+            formData.append('tool_id', uploadToolId);
             const res = await fetch(`${API_URL}/admin/ingest-md`, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${session.access_token}` },
@@ -1399,6 +1401,22 @@ export function AdminPage({ session, adminProfile }: { session: any, adminProfil
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent className="pt-5 space-y-5">
+                                    {/* Tool Selection */}
+                                    <div className="space-y-2">
+                                        <label className="text-[13px] font-medium text-[#2C2A28]">Target Tool Dashboard</label>
+                                        <select
+                                            value={uploadToolId}
+                                            onChange={(e) => setUploadToolId(e.target.value)}
+                                            className="w-full text-[13px] border border-[#E6E4E0] rounded-md px-3 py-2 bg-[#FFFFFC] focus:outline-none focus:ring-1 focus:ring-[#606C5A] text-[#2C2A28]"
+                                        >
+                                            <option value="labour-audit">Labour Code Auditor</option>
+                                            <option value="wage-compliance">Wage Compliance Checker</option>
+                                            <option value="social-security">Social Security & Benefits</option>
+                                            <option value="workplace-safety">Workplace Safety & Health</option>
+                                            <option value="ir-compliance">Industrial Relations</option>
+                                        </select>
+                                    </div>
+
                                     {/* Drop target */}
                                     <div
                                         className={`border-2 border-dashed rounded-lg p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-colors ${mdFile ? 'border-[#606C5A] bg-[#ECF0E8]/30' : 'border-[#E6E4E0] bg-[#F3F3F2]/40 hover:border-[#C0B4A8]'}`}

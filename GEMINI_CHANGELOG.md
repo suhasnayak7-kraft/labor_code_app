@@ -8,6 +8,7 @@ This file documents the changes made by the Gemini assistant.
 ### Added
 - **Reset Password Flow**: Added a "Forgot Password" flow to the `LoginPage` using Supabase's `resetPasswordForEmail`.
 - **Reset Password Page**: Created `ResetPasswordPage.tsx` to handle the password update and redirect to login.
+- **Knowledge Base Storage Separation**: Added a `tool_id` to the `labour_laws` database table and backend API routes. The Admin panel now allows selecting which tool to upload knowledge base documents to, and the Labour Code Auditor only queries context tagged with `labour-audit`. Included migration script `phase18_tool_kb.sql`.
 
 ### Fixed
 - **Onboarding Flash on Logging In**: Increased the profile fetch timeout in `useAuth.tsx` from 2 seconds to 8 seconds. This prevents a premature fallback to the "Approval Pending" (`OnboardingPage`) screen on slow networks or cold Supabase starts.

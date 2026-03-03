@@ -161,6 +161,7 @@ async def audit_status(user = Depends(get_current_user)):
 async def audit_policy(
     file: UploadFile = File(...),
     model_id: Optional[str] = Form("gemini-1.5-flash"),
+    tool_id: str = Form("labour-audit"),
     user = Depends(get_current_user)
 ):
     start_time = time.perf_counter()
@@ -229,7 +230,8 @@ async def audit_policy(
                 {
                     "query_embedding": query_embedding,
                     "match_threshold": 0.5,
-                    "match_count": 3  # Reduced from 6 — each chunk is ~3000 chars; 3 = ~9000 chars total
+                    "match_count": 3,  # Reduced from 6 — each chunk is ~3000 chars; 3 = ~9000 chars total
+                    "p_tool_id": tool_id
                 }
             ).execute()
             
@@ -247,13 +249,24 @@ async def audit_policy(
             legal_context = "No specific legal context found in the knowledge base. Apply your expertise on the 4 Indian Labour Codes: Code on Wages 2019, Industrial Relations Code 2020, Code on Social Security 2020, and Occupational Safety Health and Working Conditions Code 2020."
 
         # 4. Generate Analysis with Selected Model
-        system_instructions = """You are an expert Indian Labour Law Compliance Auditor specializing in the 4 new Labour Codes enacted in 2019-2020 (in effect from 2025):
+        system_instructions_map = {
+            "labour-audit": """You are an expert Indian Labour Law Compliance Auditor specializing in the 4 new Labour Codes enacted in 2019-2020 (in effect from 2025):
 1. Code on Wages, 2019
 2. Industrial Relations Code, 2020
 3. Code on Social Security, 2020
 4. Occupational Safety, Health and Working Conditions Code, 2020
 
-Review the provided Employee Policy and identify specific compliance gaps or satisfied requirements. Be precise — cite specific sections/chapters of the codes."""
+Review the provided Employee Policy and identify specific compliance gaps or satisfied requirements. Be precise — cite specific sections/chapters of the codes.""",
+            "wage-compliance": """You are an expert Indian Wage Compliance Auditor. Review the policy specifically for the Code on Wages 2019. Identify gaps in minimum wages, payment terms, deductions, or bonuses. Cite specific sections.""",
+            "social-security": """You are an expert Indian Social Security Compliance Auditor. Review the policy for the Code on Social Security 2020. Identify gaps in provident fund, gratuity, ESI, maternity benefits, or compensation. Cite specific sections.""",
+            "workplace-safety": """You are an expert Indian Workplace Safety Auditor. Review the policy for the Occupational Safety, Health and Working Conditions Code 2020. Identify gaps in workplace safety standard, working hours, and conditions. Cite specific sections.""",
+            "ir-compliance": """You are an expert Indian Industrial Relations Auditor. Review the policy for the Industrial Relations Code 2020. Identify gaps in dispute resolution, collective bargaining, strikes, or worker committees. Cite specific sections."""
+        }
+        
+        system_instructions = system_instructions_map.get(
+            tool_id,
+            system_instructions_map["labour-audit"]
+        )
 
         prompt = f"""
 LEGAL CONTEXT (Relevant Sections of Indian Labour Codes):
@@ -442,6 +455,7 @@ async def reset_user_password(
 @app.post("/admin/ingest-md")
 async def ingest_markdown(
     file: UploadFile = File(...),
+    tool_id: str = Form("labour-audit"),
     admin_user = Depends(get_current_user)
 ):
     """
@@ -505,7 +519,7 @@ async def ingest_markdown(
 
         # 5. Fast Batch Insert to Supabase
         ingested = 0
-        rows_to_insert = [{"content": chunk, "embedding": emb} for chunk, emb in zip(chunks, embeddings)]
+        rows_to_insert = [{"content": chunk, "embedding": emb, "tool_id": tool_id} for chunk, emb in zip(chunks, embeddings)]
         
         # Insert in chunks of 50 to avoid payload size limits to Postgres
         for i in range(0, len(rows_to_insert), 50):
