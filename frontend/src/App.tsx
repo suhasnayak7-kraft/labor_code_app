@@ -17,6 +17,7 @@ import { LabourAuditPage } from './pages/LabourAuditPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { UsagePage } from './pages/UsagePage';
 import { AdminPage } from './pages/AdminPage';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
 
 // Layout Components
 import { ShieldCheck, User, LogOut } from 'lucide-react';
@@ -48,6 +49,7 @@ export default function App() {
       <Routes>
         {/* Public Routes */}
         <Route path="/login" element={session ? <Navigate to="/" replace /> : <LoginPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/onboarding" element={
           <AuthGuard>
             <OnboardingPage />

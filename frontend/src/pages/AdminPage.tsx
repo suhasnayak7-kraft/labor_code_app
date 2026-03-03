@@ -125,7 +125,6 @@ export function AdminPage({ session, adminProfile }: { session: any, adminProfil
 
     // Modal States
     const [selectedWaitlistEntry, setSelectedWaitlistEntry] = useState<WaitingListEntry | null>(null);
-    const [provisionPassword, setProvisionPassword] = useState("");
     const [isProvisioning, setIsProvisioning] = useState(false);
 
     // Approval Dialog Open State
@@ -138,14 +137,7 @@ export function AdminPage({ session, adminProfile }: { session: any, adminProfil
     const [oldPassword, setOldPassword] = useState<string>("");
     const [showPassword, setShowPassword] = useState(false);
     const [showOldPassword, setShowOldPassword] = useState(false);
-    const [showProvisionPassword, setShowProvisionPassword] = useState(false);
     const [isEditLimitOpen, setIsEditLimitOpen] = useState(false);
-
-    // Generate a random 8-char alphanumeric password
-    const generatePassword = () => {
-        const chars = 'ABCDEFGHIJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
-        return Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-    };
 
     const handleIngestMd = async () => {
         if (!mdFile) return;
@@ -427,71 +419,43 @@ export function AdminPage({ session, adminProfile }: { session: any, adminProfil
     };
 
     const handleApproveCreation = async () => {
-        if (!selectedWaitlistEntry || !provisionPassword || provisionPassword.length < 6) {
-            toast.error("Password must be at least 6 characters.");
-            return;
-        }
+        if (!selectedWaitlistEntry) return;
 
         setIsProvisioning(true);
         try {
-            const res = await fetch(`${API_URL}/admin/users`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${session.access_token}`
-                },
-                body: JSON.stringify({
-                    email: selectedWaitlistEntry.email,
-                    password: provisionPassword,
-                    role: "user",
-                    daily_audit_limit: 1, // Default limit
-                    full_name: selectedWaitlistEntry.full_name,
-                    company_name: selectedWaitlistEntry.company_name,
-                    company_size: selectedWaitlistEntry.company_size,
-                    industry: selectedWaitlistEntry.industry
+            // First update the profile
+            const { error: profileError } = await supabase
+                .from('profiles')
+                .update({
+                    is_approved: true,
+                    is_locked: false
                 })
-            });
+                .eq('email', selectedWaitlistEntry.email);
 
-            // Safe JSON parse — server might return HTML on a 500
-            const contentType = res.headers.get('content-type') || '';
-            const data = contentType.includes('application/json') ? await res.json() : {};
-
-            // Helper to mark the waitlist entry as approved and close the dialog
-            const approveAndClose = async () => {
-                const { error: updateError } = await supabase
-                    .from('waiting_list')
-                    .update({ status: 'approved' })
-                    .eq('id', selectedWaitlistEntry.id);
-
-                if (updateError) {
-                    console.error("Waitlist update error:", updateError);
-                    toast.error("Status update failed. Ensure RLS fixes are applied!");
-                } else {
-                    setWaitingList(prev => prev.map(w => w.id === selectedWaitlistEntry.id ? { ...w, status: 'approved' } : w));
-                }
-                setProvisionPassword("");
-                setIsApproveOpen(false);
-                setSelectedWaitlistEntry(null);
-            };
-
-            if (res.ok) {
-                toast.success(`User ${selectedWaitlistEntry.email} successfully provisioned!`);
-                await approveAndClose();
-            } else {
-                const errorMessage = data.detail || "";
-                // If the user already exists in auth, still approve and close – they're already set up.
-                const alreadyExists = errorMessage.toLowerCase().includes("already been registered") ||
-                    errorMessage.toLowerCase().includes("already registered") ||
-                    errorMessage.toLowerCase().includes("already exists");
-                if (alreadyExists) {
-                    toast.success(`${selectedWaitlistEntry.email} is already registered. Marked as approved!`);
-                    await approveAndClose();
-                } else {
-                    toast.error(errorMessage || "Failed to provision user.");
-                }
+            if (profileError) {
+                console.error("Profile update error:", profileError);
+                toast.error("Failed to approve user profile. Check RLS or permissions.");
+                setIsProvisioning(false);
+                return;
             }
+
+            // Then update the waitlist entry
+            const { error: updateError } = await supabase
+                .from('waiting_list')
+                .update({ status: 'approved' })
+                .eq('id', selectedWaitlistEntry.id);
+
+            if (updateError) {
+                console.error("Waitlist update error:", updateError);
+                toast.error("Status update failed.");
+            } else {
+                setWaitingList(prev => prev.map(w => w.id === selectedWaitlistEntry.id ? { ...w, status: 'approved' } : w));
+                toast.success(`User ${selectedWaitlistEntry.email} successfully approved!`);
+            }
+            setIsApproveOpen(false);
+            setSelectedWaitlistEntry(null);
         } catch (error) {
-            toast.error("Error connecting to backend API.");
+            toast.error("An error occurred during approval.");
         }
         setIsProvisioning(false);
     };
@@ -1085,8 +1049,6 @@ export function AdminPage({ session, adminProfile }: { session: any, adminProfil
                                                                         <Dialog open={isApproveOpen && selectedWaitlistEntry?.id === req.id} onOpenChange={(open) => {
                                                                             if (open) {
                                                                                 setSelectedWaitlistEntry(req);
-                                                                                setProvisionPassword(generatePassword());
-                                                                                setShowProvisionPassword(false);
                                                                             }
                                                                             setIsApproveOpen(open);
                                                                         }}>
@@ -1095,9 +1057,9 @@ export function AdminPage({ session, adminProfile }: { session: any, adminProfil
                                                                             </DialogTrigger>
                                                                             <DialogContent>
                                                                                 <DialogHeader>
-                                                                                    <DialogTitle>Provision User Account</DialogTitle>
+                                                                                    <DialogTitle>Approve User Account</DialogTitle>
                                                                                     <DialogDescription>
-                                                                                        You are approving <strong>{req.company_name}</strong>. Create an initial password for them. The default daily audit limit will be set to 1.
+                                                                                        You are approving <strong>{req.company_name}</strong>. They will be granted access to the Compliance Hub.
                                                                                     </DialogDescription>
                                                                                 </DialogHeader>
                                                                                 <div className="grid gap-4 py-4">
@@ -1105,36 +1067,12 @@ export function AdminPage({ session, adminProfile }: { session: any, adminProfil
                                                                                         <label className="text-sm font-medium">Email Address</label>
                                                                                         <Input value={req.email} disabled className="bg-zinc-50" />
                                                                                     </div>
-                                                                                    <div className="grid gap-2">
-                                                                                        <div className="flex items-center justify-between">
-                                                                                            <label className="text-sm font-medium">Initial Password</label>
-                                                                                            <button type="button" onClick={() => setProvisionPassword(generatePassword())} className="text-xs text-blue-600 hover:underline">↻ Regenerate</button>
-                                                                                        </div>
-                                                                                        <div className="relative">
-                                                                                            <KeyRound className="absolute top-2.5 left-2.5 h-4 w-4 text-zinc-500" />
-                                                                                            <Input
-                                                                                                type={showProvisionPassword ? "text" : "password"}
-                                                                                                placeholder="Enter a secure password..."
-                                                                                                className="pl-9 pr-9"
-                                                                                                value={provisionPassword}
-                                                                                                onChange={(e) => setProvisionPassword(e.target.value)}
-                                                                                            />
-                                                                                            <button
-                                                                                                type="button"
-                                                                                                onClick={() => setShowProvisionPassword(p => !p)}
-                                                                                                className="absolute top-2.5 right-2.5 text-zinc-400 hover:text-zinc-700"
-                                                                                            >
-                                                                                                {showProvisionPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                                                                                            </button>
-                                                                                        </div>
-                                                                                        <p className="text-xs text-zinc-500">Auto-generated. Share this with the user securely.</p>
-                                                                                    </div>
                                                                                 </div>
                                                                                 <DialogFooter>
                                                                                     <Button variant="outline" onClick={() => setIsApproveOpen(false)}>Cancel</Button>
                                                                                     <Button onClick={handleApproveCreation} disabled={isProvisioning}>
                                                                                         {isProvisioning ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                                                                                        Create Account
+                                                                                        Approve Access
                                                                                     </Button>
                                                                                 </DialogFooter>
                                                                             </DialogContent>

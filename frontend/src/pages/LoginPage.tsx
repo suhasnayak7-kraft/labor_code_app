@@ -17,6 +17,8 @@ import { toast } from 'sonner';
 export const LoginPage: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState<string | null>(null);
+    const [isResetLoading, setIsResetLoading] = useState(false);
+    const [resetSent, setResetSent] = useState(false);
 
     // Form State
     const [email, setEmail] = useState('');
@@ -30,6 +32,7 @@ export const LoginPage: React.FC = () => {
         e.preventDefault();
         setLoading(true);
         setSuccess(null);
+        setResetSent(false);
 
         const { error } = await supabase.auth.signInWithPassword({ email, password });
 
@@ -39,6 +42,27 @@ export const LoginPage: React.FC = () => {
             toast.success("Identity verified. Accessing Hub...");
         }
         setLoading(false);
+    };
+
+    const handlePasswordReset = async (e: React.MouseEvent) => {
+        e.preventDefault();
+        if (!email) {
+            toast.error("Please enter your work email to reset your password.");
+            return;
+        }
+
+        setIsResetLoading(true);
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: `${window.location.origin}/reset-password`,
+        });
+
+        if (error) {
+            toast.error(error.message);
+        } else {
+            setResetSent(true);
+            toast.success("Password reset instructions sent to your email.");
+        }
+        setIsResetLoading(false);
     };
 
     const handleSignUp = async (e: React.FormEvent) => {
@@ -85,25 +109,50 @@ export const LoginPage: React.FC = () => {
 
                     <div className="p-6">
                         <TabsContent value="login">
-                            <form onSubmit={handleSignIn} className="space-y-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="email">Work Email</Label>
-                                    <div className="relative">
-                                        <Mail className="absolute left-3 top-3 h-4 w-4 text-[#8F837A]" />
-                                        <Input id="email" type="email" placeholder="name@company.com" className="pl-10 h-11 border-[#E6E4E0]" value={email} onChange={e => setEmail(e.target.value)} required />
+                            {resetSent ? (
+                                <div className="space-y-6 text-center py-4">
+                                    <div className="mx-auto bg-[#ECF0E8] w-16 h-16 rounded-full flex items-center justify-center">
+                                        <CheckCircle2 className="w-8 h-8 text-[#606C5A]" />
                                     </div>
+                                    <h3 className="text-xl font-bold">Check Your Email</h3>
+                                    <p className="text-[#5E5E5E] text-sm leading-relaxed">
+                                        We've sent password reset instructions to <strong>{email}</strong>.
+                                    </p>
+                                    <Button variant="outline" className="w-full" onClick={() => setResetSent(false)}>
+                                        Back to Sign In
+                                    </Button>
                                 </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="password">Security Key</Label>
-                                    <div className="relative">
-                                        <Lock className="absolute left-3 top-3 h-4 w-4 text-[#8F837A]" />
-                                        <Input id="password" type="password" className="pl-10 h-11 border-[#E6E4E0]" value={password} onChange={e => setPassword(e.target.value)} required />
+                            ) : (
+                                <form onSubmit={handleSignIn} className="space-y-4">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="email">Work Email</Label>
+                                        <div className="relative">
+                                            <Mail className="absolute left-3 top-3 h-4 w-4 text-[#8F837A]" />
+                                            <Input id="email" type="email" placeholder="name@company.com" className="pl-10 h-11 border-[#E6E4E0]" value={email} onChange={e => setEmail(e.target.value)} required />
+                                        </div>
                                     </div>
-                                </div>
-                                <Button type="submit" className="w-full h-11 transition-all shadow-md active:scale-[0.98]" disabled={loading}>
-                                    {loading ? "Authenticating..." : "Access Hub"}
-                                </Button>
-                            </form>
+                                    <div className="space-y-2">
+                                        <div className="flex items-center justify-between">
+                                            <Label htmlFor="password">Security Key</Label>
+                                            <button
+                                                type="button"
+                                                onClick={handlePasswordReset}
+                                                disabled={isResetLoading}
+                                                className="text-xs text-[#606C5A] hover:underline font-medium disabled:opacity-50"
+                                            >
+                                                {isResetLoading ? "Sending..." : "Forgot Password?"}
+                                            </button>
+                                        </div>
+                                        <div className="relative">
+                                            <Lock className="absolute left-3 top-3 h-4 w-4 text-[#8F837A]" />
+                                            <Input id="password" type="password" className="pl-10 h-11 border-[#E6E4E0]" value={password} onChange={e => setPassword(e.target.value)} required />
+                                        </div>
+                                    </div>
+                                    <Button type="submit" className="w-full h-11 transition-all shadow-md active:scale-[0.98] bg-[#606C5A] hover:bg-[#4E5A48] text-white" disabled={loading}>
+                                        {loading ? "Authenticating..." : "Access Hub"}
+                                    </Button>
+                                </form>
+                            )}
                         </TabsContent>
 
                         <TabsContent value="signup">
