@@ -84,7 +84,7 @@ interface PlanConfig {
     display_name: string;
     price_monthly: number;
     price_annual: number;
-    max_seats: number;
+    discount_percentage: number;
     description: string;
     is_active: boolean;
     features: string[];
@@ -118,15 +118,35 @@ export function AdminPage({ session, adminProfile }: { session: any, adminProfil
     const [fileToDelete, setFileToDelete] = useState<{ filename: string; tool_id: string } | null>(null);
     const [toolToActivate, setToolToActivate] = useState<string | null>(null);
 
-    // Tool icon map
+    // Tool Registry Management
+    const [isAddingTool, setIsAddingTool] = useState(false);
+    const [toolToEdit, setToolToEdit] = useState<ToolConfig | null>(null);
+    const [toolToPermanentlyDelete, setToolToPermanentlyDelete] = useState<ToolConfig | null>(null);
+    const [deleteConfirmName, setDeleteConfirmName] = useState("");
+    const [newToolData, setNewToolData] = useState<Partial<ToolConfig>>({
+        name: '',
+        description: '',
+        icon: 'FileText',
+        tier: 1,
+        status: 'coming_soon',
+        enabled_for_free: false,
+        enabled_for_pro: true,
+        enabled_for_max: true
+    });
+
     const toolIconMap: Record<string, React.ReactNode> = {
+        'FileText': <FileText size={18} className="text-[#606C5A]" />,
         'FileCheck': <FileCheck size={18} className="text-[#606C5A]" />,
         'Calculator': <Calculator size={18} className="text-[#606C5A]" />,
         'FolderOpen': <FolderOpen size={18} className="text-[#606C5A]" />,
         'CalendarDays': <CalendarDays size={18} className="text-[#606C5A]" />,
         'AlertTriangle': <AlertTriangle size={18} className="text-[#606C5A]" />,
         'TrendingUp': <TrendingUp size={18} className="text-[#606C5A]" />,
+        'Shield': <Shield size={18} className="text-[#606C5A]" />,
+        'Gavel': <Zap size={18} className="text-[#606C5A]" />, // Gavel not in current subset, using Zap as legal pulse
     };
+
+    const availableIcons = Object.keys(toolIconMap);
 
     // Modal States
     const [selectedWaitlistEntry, setSelectedWaitlistEntry] = useState<WaitingListEntry | null>(null);
@@ -303,21 +323,81 @@ export function AdminPage({ session, adminProfile }: { session: any, adminProfil
         }
     };
 
-    const updateToolConfig = async (toolId: string, field: string, value: boolean | number) => {
+    const updateToolConfig = async (toolId: string, field: string, value: any) => {
         setIsSavingTool(toolId);
-        const { error } = await supabase
-            .from('tool_config')
-            .update({ [field]: value })
-            .eq('id', toolId);
-
-        if (!error) {
+        try {
+            const { error } = await supabase
+                .from('tool_config')
+                .update({ [field]: value })
+                .eq('id', toolId);
+            if (error) throw error;
             setToolConfigs(prev => prev.map(t => t.id === toolId ? { ...t, [field]: value } : t));
-            toast.success('Tool configuration updated.');
-        } else {
-            toast.error('Failed to update tool config.');
-
+            toast.success('Tool configuration updated');
+        } catch (e) {
+            console.error(e);
+            toast.error('Failed to update tool');
         }
         setIsSavingTool(null);
+    };
+
+    const handleAddTool = async () => {
+        if (!newToolData.name) {
+            toast.error("Tool name is required");
+            return;
+        }
+        // Unique ID generation: name-based slug
+        const id = newToolData.name.toLowerCase().replace(/\s+/g, '-');
+
+        try {
+            const { data, error } = await supabase
+                .from('tool_config')
+                .insert([{ ...newToolData, id, sort_order: toolConfigs.length + 1 }])
+                .select();
+
+            if (error) throw error;
+            if (data) setToolConfigs(prev => [...prev, data[0]]);
+            setIsAddingTool(false);
+            setNewToolData({
+                name: '',
+                description: '',
+                icon: 'FileText',
+                tier: 1,
+                status: 'coming_soon',
+                enabled_for_free: false,
+                enabled_for_pro: true,
+                enabled_for_max: true
+            });
+            toast.success("New tool added to registry");
+        } catch (e) {
+            console.error(e);
+            toast.error("Failed to add tool");
+        }
+    };
+
+    const handlePermanentlyDeleteTool = async () => {
+        if (!toolToPermanentlyDelete) return;
+        if (deleteConfirmName !== toolToPermanentlyDelete.name) {
+            toast.error("Tool name mismatch. Deletion cancelled.");
+            return;
+        }
+
+        try {
+            // First delete files from storage if any? (Backend handles DB cleanup usually, but we ensure DB entry is gone)
+            const { error } = await supabase
+                .from('tool_config')
+                .delete()
+                .eq('id', toolToPermanentlyDelete.id);
+
+            if (error) throw error;
+
+            setToolConfigs(prev => prev.filter(t => t.id !== toolToPermanentlyDelete.id));
+            toast.success(`Tool "${toolToPermanentlyDelete.name}" permanently removed`);
+            setToolToPermanentlyDelete(null);
+            setDeleteConfirmName("");
+        } catch (e) {
+            console.error(e);
+            toast.error("Failed to delete tool");
+        }
     };
 
     const updatePlanConfig = async (planId: string, field: string, value: string | number | boolean) => {
@@ -728,9 +808,9 @@ export function AdminPage({ session, adminProfile }: { session: any, adminProfil
                         {/* Plan Tier Cards — dynamic from plan_config table */}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             {(planConfigs.length > 0 ? planConfigs : [
-                                { id: 'free', display_name: 'Free', price_monthly: 0, price_annual: 0, max_seats: 1, description: 'Self-serve access to get started', features: [], sort_order: 1, is_active: true },
-                                { id: 'pro', display_name: 'Pro', price_monthly: 49900, price_annual: 499000, max_seats: 5, description: 'For growing businesses', features: [], sort_order: 2, is_active: true },
-                                { id: 'max', display_name: 'Max', price_monthly: 99900, price_annual: 999000, max_seats: 10, description: 'For large organizations', features: [], sort_order: 3, is_active: true },
+                                { id: 'free', display_name: 'Free', price_monthly: 0, price_annual: 0, discount_percentage: 0, description: 'Self-serve access to get started', features: [], sort_order: 1, is_active: true },
+                                { id: 'pro', display_name: 'Pro', price_monthly: 49900, price_annual: 499000, discount_percentage: 15, description: 'For growing businesses', features: [], sort_order: 2, is_active: true },
+                                { id: 'max', display_name: 'Max', price_monthly: 99900, price_annual: 999000, discount_percentage: 20, description: 'For large organizations', features: [], sort_order: 3, is_active: true },
                             ] as PlanConfig[]).map(plan => {
                                 const accentMap: Record<string, string> = { free: 'border-t-[#C0B4A8]', pro: 'border-t-[#606C5A]', max: 'border-t-[#4E7A94]' };
                                 const badgeMap: Record<string, string> = { free: 'bg-[#F3F3F2] text-[#5E5E5E] border-[#E6E4E0]', pro: 'bg-[#ECF0E8] text-[#606C5A] border-[#DCE4D5]', max: 'bg-[#EBF3FA] text-[#4E7A94] border-[#C3DBE9]' };
@@ -772,17 +852,7 @@ export function AdminPage({ session, adminProfile }: { session: any, adminProfil
                                                             onBlur={e => { const v = parseInt(e.target.value, 10); if (!isNaN(v) && v !== plan.price_annual) updatePlanConfig(plan.id, 'price_annual', v); }}
                                                         />
                                                     </div>
-                                                    {(plan.id === 'pro' || plan.id === 'max') && (
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="text-[11px] text-[#8F837A] w-24 shrink-0">Max Seats</span>
-                                                            <Input
-                                                                type="number" min={1}
-                                                                defaultValue={plan.max_seats}
-                                                                className="h-7 text-[12px] border-[#E6E4E0]"
-                                                                onBlur={e => { const v = parseInt(e.target.value, 10); if (!isNaN(v) && v !== plan.max_seats) updatePlanConfig(plan.id, 'max_seats', v); }}
-                                                            />
-                                                        </div>
-                                                    )}
+
                                                     <div className="flex items-center gap-2">
                                                         <span className="text-[11px] text-[#8F837A] w-24 shrink-0">Tagline</span>
                                                         <Input
@@ -820,9 +890,25 @@ export function AdminPage({ session, adminProfile }: { session: any, adminProfil
                                             ) : (
                                                 <p className="text-[11px] text-[#C0B4A8] italic">No features listed yet.</p>
                                             )}
-                                            {(plan.id === 'pro' || plan.id === 'max') && !isEditing && (
-                                                <div className="mt-3 text-[11px] text-[#8F837A] border-t border-[#E6E4E0] pt-2">
-                                                    Max seats: <span className="font-medium text-[#2C2A28]">{plan.max_seats}</span>
+                                            {plan.price_annual > 0 && plan.discount_percentage > 0 && !isEditing && (
+                                                <div className="mt-3 text-[11px] text-[#606C5A] border-t border-[#E6E4E0] pt-2 flex items-center justify-between">
+                                                    <span>Annual Discount applied:</span>
+                                                    <span className="font-bold">-{plan.discount_percentage}%</span>
+                                                </div>
+                                            )}
+                                            {isEditing && plan.id !== 'free' && (
+                                                <div className="mt-3 space-y-2 border-t border-[#E6E4E0] pt-3">
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        <div className="space-y-1">
+                                                            <label className="text-[10px] font-bold uppercase tracking-wider text-[#8F837A]">Discount %</label>
+                                                            <Input
+                                                                type="number"
+                                                                value={plan.discount_percentage}
+                                                                onChange={e => updatePlanConfig(plan.id, 'discount_percentage', parseInt(e.target.value))}
+                                                                className="h-8 text-[12px]"
+                                                            />
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             )}
                                         </CardContent>
@@ -836,13 +922,22 @@ export function AdminPage({ session, adminProfile }: { session: any, adminProfil
                         <Card className="bg-[#FFFFFC] border-[#E6E4E0] shadow-[0_1px_3px_rgba(95,87,80,0.07)]">
                             <CardHeader className="pb-2 border-b border-[#E6E4E0]">
                                 <div className="flex items-center justify-between">
-                                    <div>
+                                    <div className="flex flex-col">
                                         <CardTitle className="text-[15px] font-medium text-[#2C2A28]">Tool Registry</CardTitle>
-                                        <CardDescription className="text-[12px] text-[#8F837A] mt-0.5">Enable or disable tools per plan. Changes apply immediately.</CardDescription>
+                                        <CardDescription className="text-[12px] text-[#8F837A] mt-0.5">Manage global availability, status, and icons for all tools.</CardDescription>
                                     </div>
-                                    <Badge className="bg-[#F3F3F2] text-[#8F837A] border-[#E6E4E0] text-[10px] uppercase tracking-wider">
-                                        {toolConfigs.filter(t => t.status === 'live').length} of {toolConfigs.length} Live
-                                    </Badge>
+                                    <div className="flex items-center gap-3">
+                                        <Badge className="bg-[#F3F3F2] text-[#8F837A] border-[#E6E4E0] text-[10px] uppercase tracking-wider">
+                                            {toolConfigs.filter(t => t.status === 'live').length} of {toolConfigs.length} Live
+                                        </Badge>
+                                        <Button
+                                            size="sm"
+                                            onClick={() => setIsAddingTool(true)}
+                                            className="bg-[#606C5A] hover:bg-[#4A5446] text-white text-[11px] h-8 font-medium px-3"
+                                        >
+                                            <Zap size={14} className="mr-1.5" /> Add New Tool
+                                        </Button>
+                                    </div>
                                 </div>
                             </CardHeader>
                             <CardContent className="p-0">
@@ -857,7 +952,8 @@ export function AdminPage({ session, adminProfile }: { session: any, adminProfil
                                             <TableHead className="text-[10px] font-bold uppercase tracking-widest text-[#8F837A] text-center">Pro</TableHead>
                                             <TableHead className="text-[10px] font-bold uppercase tracking-widest text-[#8F837A] text-center">Pro Limit</TableHead>
                                             <TableHead className="text-[10px] font-bold uppercase tracking-widest text-[#8F837A] text-center">Max</TableHead>
-                                            <TableHead className="text-[10px] font-bold uppercase tracking-widest text-[#8F837A] text-center pr-6">Max Limit</TableHead>
+                                            <TableHead className="text-[10px] font-bold uppercase tracking-widest text-[#8F837A] text-center">Max Limit</TableHead>
+                                            <TableHead className="text-[10px] font-bold uppercase tracking-widest text-[#8F837A] text-center pr-6">Actions</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -957,7 +1053,7 @@ export function AdminPage({ session, adminProfile }: { session: any, adminProfil
                                                             className="data-[state=checked]:bg-[#606C5A]"
                                                         />
                                                     </TableCell>
-                                                    <TableCell className="text-center pr-6">
+                                                    <TableCell className="text-center">
                                                         {tool.enabled_for_max ? (
                                                             <div className="flex items-center justify-center gap-1.5">
                                                                 <Input
@@ -979,6 +1075,24 @@ export function AdminPage({ session, adminProfile }: { session: any, adminProfil
                                                             <span className="text-[12px] text-[#C0B4A8]">—</span>
                                                         )}
                                                     </TableCell>
+                                                    <TableCell className="text-center pr-6">
+                                                        <div className="flex items-center justify-center gap-2">
+                                                            <button
+                                                                onClick={() => setToolToEdit(tool)}
+                                                                className="p-1.5 text-[#8F837A] hover:text-[#606C5A] hover:bg-[#F3F3F2] rounded-md transition-colors"
+                                                                title="Edit Details"
+                                                            >
+                                                                <Save size={14} />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => setToolToPermanentlyDelete(tool)}
+                                                                className="p-1.5 text-[#8F837A] hover:text-[#D32F2F] hover:bg-[#FDECEA] rounded-md transition-colors"
+                                                                title="Permanent Delete"
+                                                            >
+                                                                <Trash2 size={14} />
+                                                            </button>
+                                                        </div>
+                                                    </TableCell>
                                                 </TableRow>
                                             );
                                         })}
@@ -991,6 +1105,197 @@ export function AdminPage({ session, adminProfile }: { session: any, adminProfil
                                 )}
                             </CardContent>
                         </Card>
+
+                        {/* ADD TOOL DIALOG */}
+                        <Dialog open={isAddingTool} onOpenChange={setIsAddingTool}>
+                            <DialogContent className="sm:max-w-[425px] bg-[#FFFFFC] border-[#E6E4E0]">
+                                <DialogHeader>
+                                    <DialogTitle className="text-[#2C2A28] font-serif">Add New Tool</DialogTitle>
+                                    <DialogDescription>Create a new tool entry in the compliance hub.</DialogDescription>
+                                </DialogHeader>
+                                <div className="grid gap-4 py-4">
+                                    <div className="grid gap-2">
+                                        <label className="text-[12px] font-bold uppercase tracking-wider text-[#8F837A]">Tool Name</label>
+                                        <Input
+                                            placeholder="e.g. Wage Compliance"
+                                            value={newToolData.name}
+                                            onChange={e => setNewToolData({ ...newToolData, name: e.target.value })}
+                                        />
+                                    </div>
+                                    <div className="grid gap-2">
+                                        <label className="text-[12px] font-bold uppercase tracking-wider text-[#8F837A]">Description</label>
+                                        <textarea
+                                            className="flex h-20 w-full rounded-md border border-[#E6E4E0] bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-[#C0B4A8] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#606C5A]"
+                                            placeholder="What does this tool do?"
+                                            value={newToolData.description}
+                                            onChange={e => setNewToolData({ ...newToolData, description: e.target.value })}
+                                        />
+                                    </div>
+                                    <div className="grid gap-2">
+                                        <label className="text-[12px] font-bold uppercase tracking-wider text-[#8F837A]">Icon</label>
+                                        <div className="grid grid-cols-5 gap-2">
+                                            {availableIcons.map(iconName => (
+                                                <button
+                                                    key={iconName}
+                                                    onClick={() => setNewToolData({ ...newToolData, icon: iconName })}
+                                                    className={`p-2 flex items-center justify-center rounded-md border ${newToolData.icon === iconName ? 'bg-[#ECF0E8] border-[#606C5A]' : 'border-[#E6E4E0] hover:bg-[#F3F3F2]'}`}
+                                                >
+                                                    {toolIconMap[iconName]}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="grid gap-2">
+                                            <label className="text-[12px] font-bold uppercase tracking-wider text-[#8F837A]">Min Tier</label>
+                                            <select
+                                                className="flex h-9 w-full rounded-md border border-[#E6E4E0] bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#606C5A]"
+                                                value={newToolData.tier}
+                                                onChange={e => setNewToolData({ ...newToolData, tier: parseInt(e.target.value) })}
+                                            >
+                                                <option value={1}>Tier 1 (Free)</option>
+                                                <option value={2}>Tier 2 (Pro)</option>
+                                                <option value={3}>Tier 3 (Max)</option>
+                                            </select>
+                                        </div>
+                                        <div className="grid gap-2">
+                                            <label className="text-[12px] font-bold uppercase tracking-wider text-[#8F837A]">Status</label>
+                                            <select
+                                                className="flex h-9 w-full rounded-md border border-[#E6E4E0] bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#606C5A]"
+                                                value={newToolData.status}
+                                                onChange={e => setNewToolData({ ...newToolData, status: e.target.value as any })}
+                                            >
+                                                <option value="live">Live</option>
+                                                <option value="coming_soon">Coming Soon</option>
+                                                <option value="disabled">Disabled</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                                <DialogFooter>
+                                    <Button variant="outline" onClick={() => setIsAddingTool(false)}>Cancel</Button>
+                                    <Button onClick={handleAddTool} className="bg-[#606C5A] hover:bg-[#4A5446] text-white">Create Tool</Button>
+                                </DialogFooter>
+                            </DialogContent>
+                        </Dialog>
+
+                        {/* EDIT TOOL DETAILED DIALOG */}
+                        <Dialog open={!!toolToEdit} onOpenChange={() => setToolToEdit(null)}>
+                            <DialogContent className="sm:max-w-[425px] bg-[#FFFFFC] border-[#E6E4E0]">
+                                <DialogHeader>
+                                    <DialogTitle className="text-[#2C2A28] font-serif">Edit Tool Details</DialogTitle>
+                                </DialogHeader>
+                                {toolToEdit && (
+                                    <div className="grid gap-4 py-4">
+                                        <div className="grid gap-2">
+                                            <label className="text-[12px] font-bold uppercase tracking-wider text-[#8F837A]">Tool Name</label>
+                                            <Input
+                                                value={toolToEdit.name}
+                                                onChange={e => setToolToEdit({ ...toolToEdit, name: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className="grid gap-2">
+                                            <label className="text-[12px] font-bold uppercase tracking-wider text-[#8F837A]">Description</label>
+                                            <textarea
+                                                className="flex h-20 w-full rounded-md border border-[#E6E4E0] bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#606C5A]"
+                                                value={toolToEdit.description}
+                                                onChange={e => setToolToEdit({ ...toolToEdit, description: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className="grid gap-2">
+                                            <label className="text-[12px] font-bold uppercase tracking-wider text-[#8F837A]">Icon</label>
+                                            <div className="grid grid-cols-5 gap-2">
+                                                {availableIcons.map(iconName => (
+                                                    <button
+                                                        key={iconName}
+                                                        onClick={() => setToolToEdit({ ...toolToEdit, icon: iconName })}
+                                                        className={`p-2 flex items-center justify-center rounded-md border ${toolToEdit.icon === iconName ? 'bg-[#ECF0E8] border-[#606C5A]' : 'border-[#E6E4E0] hover:bg-[#F3F3F2]'}`}
+                                                    >
+                                                        {toolIconMap[iconName]}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="grid gap-2">
+                                                <label className="text-[12px] font-bold uppercase tracking-wider text-[#8F837A]">Tier Level</label>
+                                                <select
+                                                    className="flex h-9 w-full rounded-md border border-[#E6E4E0] bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#606C5A]"
+                                                    value={toolToEdit.tier}
+                                                    onChange={e => setToolToEdit({ ...toolToEdit, tier: parseInt(e.target.value) })}
+                                                >
+                                                    <option value={1}>Tier 1</option>
+                                                    <option value={2}>Tier 2</option>
+                                                    <option value={3}>Tier 3</option>
+                                                </select>
+                                            </div>
+                                            <div className="grid gap-2">
+                                                <label className="text-[12px] font-bold uppercase tracking-wider text-[#8F837A]">Status</label>
+                                                <select
+                                                    className="flex h-9 w-full rounded-md border border-[#E6E4E0] bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#606C5A]"
+                                                    value={toolToEdit.status}
+                                                    onChange={e => setToolToEdit({ ...toolToEdit, status: e.target.value as any })}
+                                                >
+                                                    <option value="live">Live</option>
+                                                    <option value="coming_soon">Coming Soon</option>
+                                                    <option value="disabled">Disabled</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                                <DialogFooter>
+                                    <Button variant="outline" onClick={() => setToolToEdit(null)}>Cancel</Button>
+                                    <Button
+                                        onClick={async () => {
+                                            if (toolToEdit) {
+                                                // Batch update - simpler to just call individual updates or a new function
+                                                // For now let's just update all relevant fields
+                                                const fields = ['name', 'description', 'icon', 'tier', 'status'];
+                                                for (const f of fields) {
+                                                    await updateToolConfig(toolToEdit.id, f, (toolToEdit as any)[f]);
+                                                }
+                                                setToolToEdit(null);
+                                            }
+                                        }}
+                                        className="bg-[#606C5A] hover:bg-[#4A5446] text-white"
+                                    >
+                                        Save Changes
+                                    </Button>
+                                </DialogFooter>
+                            </DialogContent>
+                        </Dialog>
+
+                        {/* PERMANENT DELETE SAFETY DIALOG */}
+                        <AlertDialog open={!!toolToPermanentlyDelete} onOpenChange={() => setToolToPermanentlyDelete(null)}>
+                            <AlertDialogContent className="bg-[#FFFFFC] border-[#E6E4E0]">
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle className="text-[#D32F2F] font-serif">Delete Tool: {toolToPermanentlyDelete?.name}?</AlertDialogTitle>
+                                    <AlertDialogDescription className="space-y-3">
+                                        <p>This action is <strong>irreversible</strong>. You are about to permanently remove this tool from the registry. All configuration and tier access for this tool will be lost.</p>
+                                        <div className="bg-[#FDECEA] p-3 rounded-md text-[#D32F2F] text-[12px]">
+                                            To confirm, please type exactly "<strong>{toolToPermanentlyDelete?.name}</strong>" below:
+                                        </div>
+                                        <Input
+                                            value={deleteConfirmName}
+                                            onChange={e => setDeleteConfirmName(e.target.value)}
+                                            placeholder="Type tool name to confirm"
+                                            className="border-[#F8C1BE] focus:ring-[#D32F2F] text-center"
+                                        />
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel onClick={() => { setToolToPermanentlyDelete(null); setDeleteConfirmName(""); }}>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction
+                                        onClick={handlePermanentlyDeleteTool}
+                                        disabled={deleteConfirmName !== toolToPermanentlyDelete?.name}
+                                        className="bg-[#D32F2F] hover:bg-[#B71C1C] text-white"
+                                    >
+                                        Delete Forever
+                                    </AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
                     </TabsContent>
 
                     <TabsContent value="system" className="space-y-6 outline-none">
@@ -1473,11 +1778,9 @@ export function AdminPage({ session, adminProfile }: { session: any, adminProfil
                                             onChange={(e) => setUploadToolId(e.target.value)}
                                             className="w-full text-[13px] border border-[#E6E4E0] rounded-md px-3 py-2 bg-[#FFFFFC] focus:outline-none focus:ring-1 focus:ring-[#606C5A] text-[#2C2A28]"
                                         >
-                                            <option value="labour-audit">Labour Code Auditor</option>
-                                            <option value="wage-compliance">Wage Compliance Checker</option>
-                                            <option value="social-security">Social Security & Benefits</option>
-                                            <option value="workplace-safety">Workplace Safety & Health</option>
-                                            <option value="ir-compliance">Industrial Relations</option>
+                                            {toolConfigs.map(t => (
+                                                <option key={t.id} value={t.id}>{t.name}</option>
+                                            ))}
                                         </select>
                                     </div>
 
@@ -1662,91 +1965,7 @@ export function AdminPage({ session, adminProfile }: { session: any, adminProfil
                             </Card>
                         </div>
 
-                        {/* MANAGE FILES SECTION */}
-                        <div className="mt-8">
-                            <div className="mb-4">
-                                <h2 className="font-serif text-xl tracking-tight text-[#2C2A28]">Manage Data Repository</h2>
-                                <p className="text-[13px] text-[#8F837A] mt-1">Review and manage documentation active in each tool's knowledge base.</p>
-                            </div>
 
-                            <Card className="bg-[#FFFFFC] border-[#E6E4E0] shadow-[0_1px_3px_rgba(95,87,80,0.07)]">
-                                <CardHeader className="pb-3 border-b border-[#E6E4E0]">
-                                    <div className="flex items-center justify-between">
-                                        <CardTitle className="text-[15px] font-medium text-[#2C2A28] flex items-center gap-2">
-                                            <FolderOpen size={16} className="text-[#606C5A]" />
-                                            Active Knowledge Base Files
-                                        </CardTitle>
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="h-8 text-[12px] text-[#606C5A]"
-                                            onClick={fetchKbFiles}
-                                            disabled={isLoadingFiles}
-                                        >
-                                            {isLoadingFiles ? <Loader2 size={14} className="animate-spin mr-1" /> : <Activity size={14} className="mr-1" />}
-                                            Refresh List
-                                        </Button>
-                                    </div>
-                                </CardHeader>
-                                <CardContent className="p-0">
-                                    <Table>
-                                        <TableHeader className="bg-[#F9F9F8]">
-                                            <TableRow className="border-[#E6E4E0]">
-                                                <TableHead className="text-[11px] font-semibold text-[#8F837A] uppercase tracking-wider py-3 px-4">Tool Context</TableHead>
-                                                <TableHead className="text-[11px] font-semibold text-[#8F837A] uppercase tracking-wider py-3">Filename</TableHead>
-                                                <TableHead className="text-right text-[11px] font-semibold text-[#8F837A] uppercase tracking-wider py-3 px-4">Actions</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody className="text-[13px]">
-                                            {isLoadingFiles ? (
-                                                <TableRow>
-                                                    <TableCell colSpan={3} className="text-center py-10">
-                                                        <Loader2 size={24} className="animate-spin mx-auto text-[#C0B4A8] mb-2" />
-                                                        <p className="text-[#8F837A]">Loading catalog...</p>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ) : kbFiles.length === 0 ? (
-                                                <TableRow>
-                                                    <TableCell colSpan={3} className="text-center py-10">
-                                                        <Database size={24} className="mx-auto text-[#C0B4A8] mb-2" />
-                                                        <p className="text-[#8F837A]">No files uploaded yet.</p>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ) : (
-                                                kbFiles.map((file, idx) => {
-                                                    const tool = toolConfigs.find(t => t.id === file.tool_id);
-                                                    return (
-                                                        <TableRow key={`${file.tool_id}-${file.filename}-${idx}`} className="border-[#E6E4E0] hover:bg-[#F9F9F8]/50 transition-colors">
-                                                            <TableCell className="py-4 px-4">
-                                                                <Badge variant="outline" className="text-[10px] font-medium bg-[#ECF0E8] text-[#606C5A] border-none px-2 whitespace-nowrap">
-                                                                    {tool?.name || file.tool_id}
-                                                                </Badge>
-                                                            </TableCell>
-                                                            <TableCell className="font-medium text-[#2C2A28]">
-                                                                <div className="flex items-center gap-2">
-                                                                    <FileText size={14} className="text-[#8F837A]" />
-                                                                    {file.filename}
-                                                                </div>
-                                                            </TableCell>
-                                                            <TableCell className="text-right py-4 px-4">
-                                                                <Button
-                                                                    variant="ghost"
-                                                                    size="icon"
-                                                                    className="h-8 w-8 text-[#8B4A42] hover:bg-[#F5ECEA] hover:text-[#8B4A42] rounded-md"
-                                                                    onClick={() => setFileToDelete(file)}
-                                                                >
-                                                                    <Trash2 size={14} />
-                                                                </Button>
-                                                            </TableCell>
-                                                        </TableRow>
-                                                    );
-                                                })
-                                            )}
-                                        </TableBody>
-                                    </Table>
-                                </CardContent>
-                            </Card>
-                        </div>
                     </TabsContent>
                 </div>
             </Tabs>

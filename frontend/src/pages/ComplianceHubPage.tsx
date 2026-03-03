@@ -1,18 +1,12 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, ArrowRight } from 'lucide-react';
+import { ShieldCheck, ArrowRight, FileText, FileCheck, Calculator, FolderOpen, CalendarDays, AlertTriangle, TrendingUp, Shield, Zap, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
+import { toast } from 'sonner';
+import { supabase } from '../lib/supabase';
 
-interface Tool {
-    id: string;
-    name: string;
-    description: string;
-    icon: React.ReactNode;
-    status: 'active' | 'coming-soon';
-    path?: string;
-}
 
 interface ComplianceHubPageProps {
     profile: any;
@@ -20,56 +14,68 @@ interface ComplianceHubPageProps {
 
 export const ComplianceHubPage: React.FC<ComplianceHubPageProps> = ({ profile }) => {
     const navigate = useNavigate();
+    const [tools, setTools] = React.useState<any[]>([]);
+    const [loading, setLoading] = React.useState(true);
 
-    const tools: Tool[] = [
-        {
-            id: 'labour-audit',
-            name: 'Labour Code Auditor',
-            description: 'Audit employee policies against Indian Labour Codes 2025. Identify compliance gaps in seconds.',
-            icon: <ShieldCheck className="w-8 h-8" />,
-            status: 'active',
-            path: '/audit',
-        },
-        {
-            id: 'wage-compliance',
-            name: 'Wage Compliance Checker',
-            description: 'Verify wage structures, deductions, and payment compliance across all labour codes.',
-            icon: <ShieldCheck className="w-8 h-8" />,
-            status: 'coming-soon',
-        },
-        {
-            id: 'social-security',
-            name: 'Social Security & Benefits',
-            description: 'Review employee benefits, PF, ESI, and gratuity compliance.',
-            icon: <ShieldCheck className="w-8 h-8" />,
-            status: 'coming-soon',
-        },
-        {
-            id: 'workplace-safety',
-            name: 'Workplace Safety & Health',
-            description: 'Assess occupational safety protocols and working conditions compliance.',
-            icon: <ShieldCheck className="w-8 h-8" />,
-            status: 'coming-soon',
-        },
-        {
-            id: 'ir-compliance',
-            name: 'Industrial Relations',
-            description: 'Check dispute resolution, collective bargaining, and employee relations policies.',
-            icon: <ShieldCheck className="w-8 h-8" />,
-            status: 'coming-soon',
-        },
-        {
-            id: 'contract-review',
-            name: 'Contract & Agreement Review',
-            description: 'Review employment contracts, service agreements, and legal documents.',
-            icon: <ShieldCheck className="w-8 h-8" />,
-            status: 'coming-soon',
-        },
-    ];
+    const isAdmin = profile?.role === 'ADMIN' || profile?.role === 'SUPER_ADMIN';
 
-    const handleToolClick = (tool: Tool) => {
-        if (tool.status === 'active' && tool.path) {
-            navigate(tool.path);
+    // Same icon map as AdminPage
+    const toolIconMap: Record<string, React.ReactNode> = {
+        'FileText': <FileText className="w-8 h-8" />,
+        'FileCheck': <FileCheck className="w-8 h-8" />,
+        'Calculator': <Calculator className="w-8 h-8" />,
+        'FolderOpen': <FolderOpen className="w-8 h-8" />,
+        'CalendarDays': <CalendarDays className="w-8 h-8" />,
+        'AlertTriangle': <AlertTriangle className="w-8 h-8" />,
+        'TrendingUp': <TrendingUp className="w-8 h-8" />,
+        'Shield': <Shield className="w-8 h-8" />,
+        'Gavel': <Zap className="w-8 h-8" />,
+    };
+
+    React.useEffect(() => {
+        const fetchTools = async () => {
+            setLoading(true);
+            try {
+                const { data, error } = await supabase
+                    .from('tool_config')
+                    .select('*')
+                    .order('sort_order', { ascending: true });
+
+                if (error) throw error;
+
+                if (data) {
+                    // Plan tier mapping
+                    const planTierMap: Record<string, number> = {
+                        'free': 1,
+                        'pro': 2,
+                        'max': 3
+                    };
+                    const userTier = planTierMap[profile?.plan?.toLowerCase()] || 1;
+
+                    // Admins see everything for testing. 
+                    // Regular users see only 'live' tools within their tier.
+                    const filtered = isAdmin
+                        ? data
+                        : data.filter(t => t.status === 'live' && t.tier <= userTier);
+
+                    setTools(filtered);
+                }
+            } catch (e) {
+                console.error("Error fetching tools:", e);
+            }
+            setLoading(false);
+        };
+
+        fetchTools();
+    }, [profile, isAdmin]);
+
+    const handleToolClick = (tool: any) => {
+        // Admins can bypass the 'active' check for testing
+        if ((tool.status === 'live' || isAdmin) && (tool.id === 'labour-audit')) {
+            navigate('/audit');
+        } else if (tool.status === 'live' || isAdmin) {
+            // Placeholder for other tools once paths are defined
+            toast.info(`Tool "${tool.name}" is being finalized.`);
         }
     };
 
@@ -82,60 +88,80 @@ export const ComplianceHubPage: React.FC<ComplianceHubPageProps> = ({ profile })
             </div>
 
             {/* Tools Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {tools.map((tool) => (
-                    <Card
-                        key={tool.id}
-                        className={`relative transition-all duration-300 ${tool.status === 'active'
-                            ? 'cursor-pointer hover:shadow-lg hover:border-[#606C5A]'
-                            : 'opacity-60'
-                            }`}
-                        onClick={() => handleToolClick(tool)}
-                    >
-                        <CardHeader>
-                            <div className="flex items-start justify-between">
-                                <div className="flex items-center gap-3">
-                                    <div className="text-[#606C5A]">{tool.icon}</div>
-                                    <div className="space-y-1">
-                                        <CardTitle className="text-lg">{tool.name}</CardTitle>
+            {loading ? (
+                <div className="flex flex-col items-center justify-center py-20 space-y-4">
+                    <Loader2 className="w-10 h-10 animate-spin text-[#606C5A]" />
+                    <p className="text-[#8F837A] font-medium">Loading your tools...</p>
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {tools.map((tool) => {
+                        const isComingSoon = tool.status === 'coming_soon';
+                        const isLive = tool.status === 'live';
+                        const isAccessible = isLive || isAdmin;
+
+                        return (
+                            <Card
+                                key={tool.id}
+                                className={`relative transition-all duration-300 border-[#E6E4E0] flex flex-col ${isAccessible
+                                    ? 'cursor-pointer hover:shadow-lg hover:border-[#606C5A]'
+                                    : 'opacity-60 grayscale-[0.5]'
+                                    }`}
+                                onClick={() => handleToolClick(tool)}
+                            >
+                                <CardHeader className="pb-3">
+                                    <div className="flex items-start justify-between">
+                                        <div className="flex items-center gap-4">
+                                            <div className="p-2.5 bg-[#ECF0E8] rounded-xl text-[#606C5A] border border-[#DCE4D5] shadow-sm">
+                                                {toolIconMap[tool.icon] || <ShieldCheck className="w-8 h-8" />}
+                                            </div>
+                                            <CardTitle className="text-xl font-serif text-[#2C2A28] leading-tight">
+                                                {tool.name}
+                                                {isAdmin && (
+                                                    <Badge className="ml-2 bg-[#4E7A94]/10 text-[#4E7A94] border-[#4E7A94]/20 text-[9px] uppercase tracking-tighter align-middle">
+                                                        Admin Access
+                                                    </Badge>
+                                                )}
+                                            </CardTitle>
+                                        </div>
+                                        {isComingSoon && !isAdmin && (
+                                            <Badge variant="outline" className="bg-[#F3F3F2] text-[#8F837A] border-[#E6E4E0] text-[10px] uppercase font-bold tracking-wider">
+                                                Coming Soon
+                                            </Badge>
+                                        )}
                                     </div>
-                                </div>
-                                {tool.status === 'coming-soon' && (
-                                    <Badge variant="outline" className="ml-2 shrink-0">
-                                        Coming Soon
-                                    </Badge>
-                                )}
-                            </div>
-                        </CardHeader>
+                                </CardHeader>
 
-                        <CardContent className="space-y-4">
-                            <CardDescription className="text-sm leading-relaxed">
-                                {tool.description}
-                            </CardDescription>
+                                <CardContent className="flex-1 flex flex-col space-y-6 pt-0">
+                                    <CardDescription className="text-[13px] text-[#5E5E5E] leading-relaxed">
+                                        {tool.description}
+                                    </CardDescription>
 
-                            {tool.status === 'active' && (
-                                <Button
-                                    variant="default"
-                                    className="w-full gap-2"
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleToolClick(tool);
-                                    }}
-                                >
-                                    Access Tool
-                                    <ArrowRight className="w-4 h-4" />
-                                </Button>
-                            )}
-
-                            {tool.status === 'coming-soon' && (
-                                <Button variant="outline" className="w-full" disabled>
-                                    Available Soon
-                                </Button>
-                            )}
-                        </CardContent>
-                    </Card>
-                ))}
-            </div>
+                                    <div className="mt-auto">
+                                        {isAccessible ? (
+                                            <Button
+                                                variant="default"
+                                                className="w-full gap-2 bg-[#606C5A] hover:bg-[#4A5446] text-white shadow-sm transition-all active:scale-[0.98]"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleToolClick(tool);
+                                                }}
+                                            >
+                                                Access Tool
+                                                <ArrowRight className="w-4 h-4" />
+                                            </Button>
+                                        ) : (
+                                            <Button variant="outline" className="w-full border-[#E6E4E0] text-[#8F837A]" disabled>
+                                                Coming Soon
+                                            </Button>
+                                        )}
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        );
+                    })}
+                </div>
+            )}
 
             {/* Plan Info Section */}
             <Card className="bg-gradient-to-r from-[#ECF0E8] to-[#F3F3F2] border-[#E6E4E0]">
