@@ -168,7 +168,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             profile,
             loading,
             refreshProfile,
-            signOut: () => supabase.auth.signOut(),
+            signOut: async () => {
+                const { error } = await supabase.auth.signOut();
+                if (error) console.error('[Auth] SignOut error:', error);
+
+                // Aggressively clear local state on sign out
+                setSession(null);
+                setProfile(null);
+                setLoading(false);
+                localStorage.removeItem('sb_session');
+
+                return { error };
+            },
         }}>
             {children}
         </AuthContext.Provider>

@@ -16,8 +16,13 @@ export const OnboardingPage: React.FC = () => {
     const navigate = useNavigate();
 
     const handleSignOut = async () => {
-        await signOut();
-        navigate('/login', { replace: true });
+        try {
+            await signOut();
+        } catch (error) {
+            console.error('Sign out error:', error);
+        } finally {
+            navigate('/login', { replace: true });
+        }
     };
 
     useEffect(() => {
