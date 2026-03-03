@@ -85,8 +85,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             });
 
         // 3. Listen for Auth Changes (Sign In, Sign Out, Token Refresh)
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
             if (isMounted) {
+                // If a user signs in, or we get a session but don't have a profile yet, set loading to true
+                // to prevent components like ApprovalGuard from redirecting prematurely.
+                if (event === 'SIGNED_IN' || (session && !profile)) {
+                    setLoading(true);
+                }
+
                 setSession(session);
                 if (session) {
                     localStorage.setItem('sb_session', JSON.stringify(session));
